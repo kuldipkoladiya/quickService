@@ -1,0 +1,23 @@
+version: '3.1'
+
+services:
+  db:
+   image: mongo:latest
+   restart: always
+   container_name: quickService-local-db
+   ports:
+    - '27017:27017'
+   volumes:
+    - mongodata:/data/db
+
+  redis:
+   image: redis
+   container_name: quickService-local-redis
+   ports:
+    - "6379:6379"
+   volumes:
+    - redisdata:/var/lib/redis
+
+volumes:
+  mongodata:
+  redisdata:
