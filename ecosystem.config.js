@@ -1,7 +1,7 @@
 module.exports = {
   apps: [
     {
-      name: 'app',
+      name: 'services-be-main',
       script: './build/index.js',
       instances: 1,
       env: {
