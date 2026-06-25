@@ -1,4 +1,5 @@
-import config from 'config/config';
+// eslint-disable-next-line import/extensions,import/no-unresolved
+import config from './config';
 
 const configuration = {
   mongodb: {
