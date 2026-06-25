@@ -22,6 +22,7 @@ import vendorAvailabilityRoutes from './v1/vendorAvailability/vendorAvailability
 import bookingTrackingRoutes from './v1/bookingTracking/bookingTracking.route';
 import favoriteVendorRoutes from './v1/favoriteVendor/favoriteVendor.route';
 import authRoutes from './v1/auth/auth.route';
+import countryCodeRoute from './v1/countryCode/countryCode.route';
 
 const router = express.Router();
 router.use('/user', userRoutes);
@@ -47,4 +48,5 @@ router.use('/vendorAvailability', vendorAvailabilityRoutes);
 router.use('/bookingTracking', bookingTrackingRoutes);
 router.use('/favoriteVendor', favoriteVendorRoutes);
 router.use('/auth', authRoutes);
+router.use('/country-code', countryCodeRoute);
 module.exports = router;

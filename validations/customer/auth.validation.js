@@ -6,14 +6,32 @@ import Joi from 'joi';
 import enumFields from 'models/enum.model';
 import config from '../../config/config';
 
-export const register = {
-  body: Joi.object().keys({
-    email: Joi.string().required().email(),
-    password: Joi.string().required(),
-    name: Joi.string().required(),
-  }),
+export const registerCustomer = {
+  body: Joi.object()
+    .keys({
+      email: Joi.string().email().optional(), // Optional, but should be a valid email if provided
+      password: Joi.string(),
+      name: Joi.string(), // Name is required
+      mobileNumber: Joi.string()
+        .pattern(/^[0-9]{10,15}$/)
+        .optional(), // Optional, but should be valid if provided (between 10-15 digits)
+      userUniqueId: Joi.string().optional(), // Optional field
+      countryCodeId: Joi.objectId().optional(),
+    })
+    .xor('email', 'mobileNumber'),
 };
 
+export const register = {
+  body: Joi.object()
+    .keys({
+      name: Joi.string().required(),
+      businessName: Joi.string().required(),
+      email: Joi.string().email(),
+      mobileNumber: Joi.number(),
+      countryCodeId: Joi.string().optional(),
+    })
+    .or('email', 'mobileNumber'),
+};
 export const login = {
   body: Joi.object().keys({
     email: Joi.string().email().required(),
@@ -35,10 +53,17 @@ export const forgotPassword = {
 };
 
 export const verifyOtp = {
-  body: Joi.object().keys({
-    email: Joi.string().email().required(),
-    otp: Joi.number().required(),
-  }),
+  body: Joi.object()
+    .keys({
+      email: Joi.string().email(),
+      mobileNumber: Joi.string().pattern(/^\d+$/), // Allow only digits
+      otp: Joi.number().required(),
+      deviceToken: Joi.string().allow(''),
+    })
+    .or('email', 'mobileNumber') // At least one is required
+    .messages({
+      'object.missing': 'Please provide either email or mobileNumber to verify OTP',
+    }),
 };
 
 // Token-based Verification when user select forgotPassword

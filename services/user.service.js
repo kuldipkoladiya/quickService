@@ -28,7 +28,7 @@ export async function getUserListWithPagination(filter, options = {}) {
   return user;
 }
 
-export async function createUser(body, options = {}) {
+export async function createUser(body = {}) {
   if (await User.isEmailTaken(body.email)) {
     throw new ApiError(httpStatus.BAD_REQUEST, 'Email already taken');
   }
@@ -70,6 +70,7 @@ export async function aggregateUser(query) {
 
 export async function aggregateUserWithPagination(query, options = {}) {
   const aggregate = User.aggregate();
+  // eslint-disable-next-line array-callback-return
   query.map((obj) => {
     aggregate._pipeline.push(obj);
   });

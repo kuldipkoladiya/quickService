@@ -24,3 +24,4 @@ module.exports.vendorAvailabilityController = require('./vendorAvailability.cont
 module.exports.bookingTrackingController = require('./bookingTracking.controller');
 module.exports.favoriteVendorController = require('./favoriteVendor.controller');
 module.exports.authController = require('./auth.controller');
+module.exports.CountryCodeController = require('./countryCode.controller');

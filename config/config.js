@@ -37,6 +37,8 @@ const envVarsSchema = Joi.object()
     APPLE_KEY_ID: Joi.string().required().description('Apple KeyId is required'),
     STRIPE_KEY: Joi.string().required().description('Stripe Secret Key required'),
     STRIPE_GATEWAY_ID: Joi.string().required().description('Stripe Gateway Id required'),
+    MSG91_AUTH_KEY: Joi.string().required().description('msg91 auth key '),
+    MSG91_TEMPLATE_ID: Joi.string().required().description('msg91 template id '),
   })
   .unknown();
 const { value: envVars, error } = envVarsSchema.prefs({ errors: { label: 'key' } }).validate(process.env);
@@ -64,8 +66,9 @@ export default {
   },
   email: {
     smtp: {
-      host: envVars.SMTP_HOST,
-      port: envVars.SMTP_PORT,
+      // host: envVars.SMTP_HOST,
+      // port: envVars.SMTP_PORT,
+      service: 'Gmail',
       auth: {
         user: envVars.SMTP_USERNAME,
         pass: envVars.SMTP_PASSWORD,
@@ -115,5 +118,9 @@ export default {
   stripe: {
     key: envVars.STRIPE_KEY,
     gatewayId: envVars.STRIPE_GATEWAY_ID,
+  },
+  mobileOtp: {
+    msg91_auth: envVars.MSG91_AUTH_KEY,
+    msg91_template: envVars.MSG91_TEMPLATE_ID,
   },
 };

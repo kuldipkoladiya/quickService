@@ -10,7 +10,13 @@ const router = express.Router();
  * Register API
  */
 router.post(
-  '/register',
+  '/register-customer',
+  validate(authValidation.registerCustomer),
+  /* verifyCaptcha('captcha'), // we have disable the captcha so that nothing will break in the code. */
+  authController.registerCustomer
+);
+router.post(
+  '/register-vendor',
   validate(authValidation.register),
   /* verifyCaptcha('captcha'), // we have disable the captcha so that nothing will break in the code. */
   authController.register
@@ -25,6 +31,11 @@ router.post('/send-verify-email', validate(authValidation.sendVerifyEmail), auth
  * If User did not receive Email during register then call this API Again
  */
 router.post('/send-verify-otp', validate(authValidation.sendVerifyEmail), authController.sendVerifyOtp);
+/**
+ * OTP-based verification for email
+ * Verify OTP for successfully Signup
+ */
+router.post('/verify-otp-customer', validate(authValidation.verifyOtp), authController.verifyOtpCustomer);
 /**
  * OTP-based verification
  * Verify OTP for successfully Signup

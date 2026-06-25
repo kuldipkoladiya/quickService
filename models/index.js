@@ -28,3 +28,4 @@ module.exports.TempS3 = require('./tempS3.model');
 module.exports.Error = require('./error.model');
 module.exports.Enum = require('./enum.model');
 module.exports.plugins = require('./plugins');
+module.exports.CountryCode = require('./countryCode.model');

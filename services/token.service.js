@@ -93,6 +93,48 @@ export const verifyCode = async (verificationRequest) => {
   return tokenDoc;
 };
 
+export const verifyOtpCustomer = async ({ email, mobileNumber, otp }) => {
+  console.log('➡️ verifyOtp called');
+
+  let user;
+
+  if (email) {
+    user = await userService.getOne({ email });
+  } else if (mobileNumber) {
+    user = await userService.getOne({ mobileNumber });
+  }
+
+  if (!user) {
+    throw new ApiError(httpStatus.BAD_REQUEST, 'No user found with this email or mobile number');
+  }
+
+  const otpValue = String(otp).trim();
+
+  const otpCode = user.codes.find(
+    (code) => String(code.code).trim() === otpValue && code.codeType === EnumCodeTypeOfCode.LOGIN
+  );
+
+  if (!otpCode) {
+    throw new ApiError(httpStatus.BAD_REQUEST, 'Invalid OTP');
+  }
+
+  if (new Date(otpCode.expirationDate).getTime() < Date.now()) {
+    throw new ApiError(httpStatus.BAD_REQUEST, 'OTP has expired');
+  }
+
+  // 🗑 Remove used OTP
+  user.codes = user.codes.filter(
+    (code) => !(String(code.code).trim() === otpValue && code.codeType === EnumCodeTypeOfCode.LOGIN)
+  );
+
+  // ✅ Activate user
+  user.emailVerified = true;
+  user.active = true;
+
+  await user.save();
+
+  return user;
+};
 export const verifyOtp = async (email, otp) => {
   const user = await userService.getOne({ email });
   if (!user) {
@@ -102,11 +144,11 @@ export const verifyOtp = async (email, otp) => {
     throw new ApiError(httpStatus.BAD_REQUEST, 'your email is already verified!');
   }
   // eslint-disable-next-line eqeqeq
-  const otpCode = _.find(user.codes, (code) => code.code == otp && code.codeType === EnumCodeTypeOfCode.LOGIN);
+  const otpCode = _.find(user.codes, (code) => code.code === otp && code.codeType === EnumCodeTypeOfCode.LOGIN);
   if (!otpCode || otpCode.expirationDate < Date.now()) {
     throw new ApiError(httpStatus.BAD_REQUEST, 'otp is Invalid');
   }
-  user.codes = _.filter(user.codes, (code) => code.code != otp);
+  user.codes = _.filter(user.codes, (code) => code.code !== otp);
   user.emailVerified = true;
   user.active = true;
   return user.save();
@@ -149,7 +191,7 @@ export const verifyResetOtp = async (email, otp) => {
   if (!otpCode || otpCode.expirationDate < Date.now()) {
     throw new ApiError(httpStatus.BAD_REQUEST, 'otp is Invalid');
   }
-  user.codes = _.filter(user.codes, (code) => code.code != otp);
+  user.codes = _.filter(user.codes, (code) => code.code !== otp);
   await user.save();
   return user;
 };
@@ -167,7 +209,7 @@ export const verifyResetOtpVerify = async (email, otp) => {
   if (otpCode.expirationDate < Date.now()) {
     throw new ApiError(httpStatus.BAD_REQUEST, 'otp is expired');
   }
-  user.codes = _.filter(user.codes, (code) => code.code != otp);
+  user.codes = _.filter(user.codes, (code) => code.code !== otp);
   await user.save();
   return user;
 };
