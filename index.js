@@ -14,7 +14,7 @@ mongoose.connect(config.mongoose.url, config.mongoose.options).then(() => {
   server = app.listen(config.port, () => {
     logger.info(`Listening to port ${config.port}`);
   });
-  require('./migrateMongo')();
+  // require('./migrateMongo')();
   // check whether Socket is enabled or not TODO: implement in the future
   socketAPI.io.adapter(redisAdapter({ host: config.redis.host, port: config.redis.port }));
   socketAPI.io.attach(server);
