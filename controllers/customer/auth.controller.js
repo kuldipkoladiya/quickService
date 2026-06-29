@@ -160,6 +160,7 @@ export const verifyOtpCustomer = catchAsync(async (req, res) => {
         id: updatedUser._id,
         email: updatedUser.email,
         mobileNumber: updatedUser.mobileNumber,
+        fullName: updatedUser.fullName,
         role: updatedUser.role,
       },
       tokens,
