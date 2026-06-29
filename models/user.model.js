@@ -117,7 +117,7 @@ const UserSchema = new mongoose.Schema({
   facebookProvider: {
     type: OauthSchema,
   },
-  mobile: {
+  mobileNumber: {
     type: Number,
   },
   isDeleted: {
