@@ -7,8 +7,11 @@ const EnumRoleOfUser = {
   ADMIN: 'admin',
 };
 const EnumCodeTypeOfCode = {
+  RESET_LOGIN_CRED: 'resetLoginCred',
   RESETPASSWORD: 'resetPassword',
   LOGIN: 'login',
+  MOBILE: 'mobile',
+  EMAIL: 'email',
 };
 const EnumPlatformOfDeviceToken = {
   ANDROID: 'android',

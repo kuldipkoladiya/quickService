@@ -206,9 +206,77 @@ export const userInfo = catchAsync(async (req, res) => {
  * @type {(function(*, *, *): void)|*}
  */
 export const updateUserInfo = catchAsync(async (req, res) => {
-  const filter = { _id: req.user._id };
-  const user = await userService.updateUser(filter, req.body);
-  res.status(httpStatus.OK).send({ user });
+  const { user } = req;
+  const { email, mobileNumber, countryCodeId, ...otherFields } = req.body;
+
+  /* ---------------- NORMAL FIELDS ---------------- */
+  if (Object.keys(otherFields).length) {
+    await userService.updateUserForAuth({ _id: user._id }, otherFields, { new: true }, user);
+  }
+
+  /* ---------------- EMAIL UPDATE ---------------- */
+  if (email && email !== user.email) {
+    const exists = await userService.getOne({
+      email,
+      _id: { $ne: user._id },
+    });
+
+    if (exists) {
+      throw new ApiError(httpStatus.BAD_REQUEST, 'Email already taken');
+    }
+
+    const otp = generateOtp();
+
+    user.codes.push({
+      code: String(otp),
+      codeType: EnumCodeTypeOfCode.EMAIL,
+      expirationDate: new Date(Date.now() + 10 * 60 * 1000),
+      used: false,
+    });
+
+    user.pendingEmail = email;
+    await user.save();
+
+    await emailService.sendOtpVerificationEmail({ email }, otp);
+
+    return res.status(httpStatus.OK).send({
+      message: 'OTP sent to email. Please verify.',
+      verifyType: 'email',
+    });
+  }
+
+  /* ---------------- MOBILE UPDATE ---------------- */
+  if (mobileNumber && mobileNumber !== user.mobileNumber) {
+    const country = await countryCodeService.getCountryCodeById(countryCodeId);
+    if (!country) {
+      throw new ApiError(httpStatus.BAD_REQUEST, 'Valid countryCodeId required');
+    }
+
+    const otp = generateOtp();
+
+    user.codes.push({
+      code: String(otp),
+      codeType: EnumCodeTypeOfCode.MOBILE,
+      expirationDate: new Date(Date.now() + 10 * 60 * 1000),
+      used: false,
+    });
+
+    user.pendingMobileNumber = mobileNumber;
+    user.pendingCountryCode = country.code;
+
+    await user.save();
+
+    await sendOtpToMobile(`${country.code}${mobileNumber}`, otp);
+
+    return res.status(httpStatus.OK).send({
+      message: 'OTP sent to mobile. Please verify.',
+      verifyType: 'mobile',
+    });
+  }
+
+  return res.status(httpStatus.OK).send({
+    message: 'Profile updated successfully',
+  });
 });
 
 export const sendVerifyOtp = catchAsync(async (req, res) => {
@@ -278,4 +346,41 @@ export const updateDeviceToken = catchAsync(async (req, res) => {
   } else {
     res.status(httpStatus.OK).send({ results: user });
   }
+});
+
+export const verifyUpdateOtp = catchAsync(async (req, res) => {
+  const { user } = req;
+  const { otp, type } = req.body;
+
+  const otpCode = user.codes.find(
+    (c) => c.code === String(otp) && c.codeType === type && !c.used && c.expirationDate > new Date()
+  );
+
+  if (!otpCode) {
+    throw new ApiError(httpStatus.BAD_REQUEST, 'Invalid or expired OTP');
+  }
+
+  otpCode.used = true;
+
+  // ✅ APPLY VERIFIED DATA
+  if (type === EnumCodeTypeOfCode.EMAIL) {
+    user.email = user.pendingEmail;
+    user.pendingEmail = null;
+    user.emailVerified = true;
+  }
+
+  if (type === EnumCodeTypeOfCode.MOBILE) {
+    user.mobileNumber = user.pendingMobileNumber;
+    user.countryCode = user.pendingCountryCode;
+    user.pendingMobileNumber = null;
+    user.pendingCountryCode = null;
+    user.isMobileVerifed = true;
+  }
+
+  await user.save();
+
+  return res.status(httpStatus.OK).send({
+    message: 'OTP verified & profile updated successfully',
+    user,
+  });
 });

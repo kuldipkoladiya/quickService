@@ -17,7 +17,22 @@ export async function getOne(query, options = {}) {
   const user = await User.findOne(query, options.projection, options);
   return user;
 }
+export async function updateUserForAuth(filter, body, options = {}, user) {
+  // --- Check email uniqueness ---
+  if (body.email && (await User.findOne({ email: body.email, _id: { $ne: user._id } }))) {
+    throw new ApiError(httpStatus.BAD_REQUEST, 'Email already taken');
+  }
 
+  // --- Hash password if provided ---
+  // if (body && body.password) {
+  //   // eslint-disable-next-line no-param-reassign
+  //   body.password = await bcrypt.hash(body.password, 10);
+  // }
+
+  // --- Update user ---
+  await User.updateOne(filter, body, options);
+  return getOne(filter);
+}
 export async function getUserList(filter, options = {}) {
   const user = await User.find(filter, options.projection, options);
   return user;
@@ -29,9 +44,9 @@ export async function getUserListWithPagination(filter, options = {}) {
 }
 
 export async function createUser(body = {}) {
-  if (await User.isEmailTaken(body.email)) {
-    throw new ApiError(httpStatus.BAD_REQUEST, 'Email already taken');
-  }
+  // if (await User.isEmailTaken(body.email)) {
+  //   throw new ApiError(httpStatus.BAD_REQUEST, 'Email already taken');
+  // }
   const user = await User.create(body);
   return user;
 }
