@@ -78,7 +78,7 @@ const UserSchema = new mongoose.Schema({
   role: {
     type: String,
     enum: Object.values(enumModel.EnumRoleOfUser),
-    default: enumModel.EnumRoleOfUser.USER,
+    default: enumModel.EnumRoleOfUser.CUSTOMER,
   },
   /**
    * Google based authentication
