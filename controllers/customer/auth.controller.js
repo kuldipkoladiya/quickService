@@ -4,7 +4,7 @@ import ApiError from 'utils/ApiError';
 import { catchAsync } from 'utils/catchAsync';
 import { authService, tokenService, userService, emailService, countryCodeService } from 'services';
 
-import { EnumTypeOfToken, EnumCodeTypeOfCode } from 'models/enum.model';
+import { EnumTypeOfToken, EnumCodeTypeOfCode, EnumRoleOfUser } from 'models/enum.model';
 import { sendOtpToMobile } from '../../services/mobileotp.service';
 
 export const registerCustomer = catchAsync(async (req, res) => {
@@ -15,9 +15,9 @@ export const registerCustomer = catchAsync(async (req, res) => {
 
   // 🔍 Find user by email or mobile
   if (email) {
-    user = await userService.getOne({ email });
+    user = await userService.getOne({ email, role: EnumRoleOfUser.CUSTOMER });
   } else if (mobileNumber) {
-    user = await userService.getOne({ mobileNumber });
+    user = await userService.getOne({ mobileNumber, role: EnumRoleOfUser.CUSTOMER });
   }
 
   // 🌍 Handle country code (only for mobile)
@@ -34,6 +34,7 @@ export const registerCustomer = catchAsync(async (req, res) => {
   if (!user) {
     user = await userService.createUser({
       ...body,
+      role: EnumRoleOfUser.CUSTOMER,
       ...(countryCode && { countryCode }),
     });
   }
@@ -81,9 +82,24 @@ export const register = catchAsync(async (req, res) => {
     }
   }
 
+  const { email, mobileNumber, businessName } = body;
+
+  if (email && (await userService.getOne({ email, role: EnumRoleOfUser.VENDOR }))) {
+    throw new ApiError(httpStatus.BAD_REQUEST, 'Email already taken');
+  }
+
+  if (mobileNumber && (await userService.getOne({ mobileNumber, role: EnumRoleOfUser.VENDOR }))) {
+    throw new ApiError(httpStatus.BAD_REQUEST, 'Mobile number already taken');
+  }
+
+  if (businessName && (await userService.getOne({ businessName, role: EnumRoleOfUser.VENDOR }))) {
+    throw new ApiError(httpStatus.BAD_REQUEST, 'Business name already taken');
+  }
+
   // Create the user object, only add countryCode if the user registered with a mobile number
   const user = await userService.createUser({
     ...body,
+    role: EnumRoleOfUser.VENDOR,
     ...(userCountryCode && { countryCode: userCountryCode.code }), // Only include countryCode if it's present
   });
 
@@ -155,10 +171,10 @@ export const register = catchAsync(async (req, res) => {
   });
 });
 export const login = catchAsync(async (req, res) => {
-  const { email, password, mobileNumber, countryCodeId, deviceToken } = req.body;
+  const { email, password, mobileNumber, countryCodeId, deviceToken, role } = req.body;
 
   // First, authenticate the user with email/password or mobile/password
-  const user = await authService.loginUserWithEmailOrMobileAndPassword(email, mobileNumber, countryCodeId, password);
+  const user = await authService.loginUserWithEmailOrMobileAndPassword(email, mobileNumber, countryCodeId, password, role);
 
   // const checkUserActivePlan = await checkUserPremiumStatus(user._id);
   // // console.log('=====xx====>', checkUserActivePlan);
@@ -210,10 +226,10 @@ export const login = catchAsync(async (req, res) => {
 
 // if user's email is not verified then we call this function for reverification
 export const sendVerifyEmail = catchAsync(async (req, res) => {
-  const { email } = req.body;
-  const emailVerifyToken = await tokenService.generateVerifyEmailToken(email);
-  const user = await userService.getOne({ email });
-  emailService.sendEmailVerificationEmail(user, emailVerifyToken, 'customer').then().catch();
+  const { email, role = EnumRoleOfUser.CUSTOMER } = req.body;
+  const emailVerifyToken = await tokenService.generateVerifyEmailToken(email, role);
+  const user = await userService.getOne({ email, role });
+  emailService.sendEmailVerificationEmail(user, emailVerifyToken, role).then().catch();
   res.status(httpStatus.OK).send({
     success: true,
     message: 'Email has been sent to your registered email. Please check your email and verify it',
@@ -231,8 +247,8 @@ export const verifyEmail = catchAsync(async (req, res) => {
 });
 
 export const forgotPassword = catchAsync(async (req, res) => {
-  const { email } = req.body;
-  await authService.forgotPassword(email);
+  const { email, role } = req.body;
+  await authService.forgotPassword(email, role);
   res.status(httpStatus.OK).send({ results: { success: true, message: 'Code has been sent' } });
 });
 
@@ -241,8 +257,9 @@ export const forgotPassword = catchAsync(async (req, res) => {
  * @type {(function(*, *, *): void)|*}
  */
 export const forgotPasswordToken = catchAsync(async (req, res) => {
-  const resetPasswordToken = await tokenService.generateResetPasswordToken(req.body.email);
-  await emailService.sendResetPasswordEmail(req.body.email, resetPasswordToken);
+  const { email, role } = req.body;
+  const resetPasswordToken = await tokenService.generateResetPasswordToken(email, role);
+  await emailService.sendResetPasswordEmail(email, resetPasswordToken);
   res.status(httpStatus.OK).send({ success: true, message: 'Reset password link is sent to your email successfully' });
 });
 
@@ -290,7 +307,9 @@ export const verifyOtpVendor = catchAsync(async (req, res) => {
   // Pass both to allow fallback
   await tokenService.verifyOtp({ email, mobileNumber, otp });
 
-  const user = await userService.getOne(email ? { email } : { mobileNumber });
+  const user = await userService.getOne(
+    email ? { email, role: EnumRoleOfUser.VENDOR } : { mobileNumber, role: EnumRoleOfUser.VENDOR }
+  );
 
   const tokens = await tokenService.generateAuthTokens(user);
 

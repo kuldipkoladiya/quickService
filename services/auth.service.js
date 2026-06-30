@@ -6,7 +6,7 @@ import ApiError from 'utils/ApiError';
 import _ from 'lodash';
 import { User, Token } from 'models';
 import { userService, tokenService, emailService, countryCodeService } from 'services';
-import { EnumTypeOfToken, EnumCodeTypeOfCode } from 'models/enum.model';
+import { EnumTypeOfToken, EnumCodeTypeOfCode, EnumRoleOfUser } from 'models/enum.model';
 import bcrypt from 'bcryptjs';
 import { generateOtp } from 'utils/common';
 /**
@@ -15,8 +15,8 @@ import { generateOtp } from 'utils/common';
  * @param {string} password
  * @returns {Promise<User>}
  */
-export const loginUserWithEmailAndPassword = async (email, password) => {
-  const user = await userService.getOne({ email });
+export const loginUserWithEmailAndPassword = async (email, password, role = EnumRoleOfUser.CUSTOMER) => {
+  const user = await userService.getOne({ email, role });
   if (!user) {
     throw new ApiError(httpStatus.BAD_REQUEST, 'Incorrect email or password');
   }
@@ -46,8 +46,8 @@ export const verifyEmail = async (verifyRequest) => {
  * @param {string} email
  * @returns {Promise<User>}
  */
-export const forgotPassword = async (email) => {
-  const user = await userService.getOne({ email });
+export const forgotPassword = async (email, role = EnumRoleOfUser.CUSTOMER) => {
+  const user = await userService.getOne({ email, role });
   if (!user) {
     throw new ApiError(httpStatus.BAD_REQUEST, 'no user found with this email');
   }
@@ -210,18 +210,24 @@ export const createSocialUser = async (accessToken, refreshToken, profile, provi
   });
 };
 
-export const loginUserWithEmailOrMobileAndPassword = async (email, mobileNumber, countryCodeId, password) => {
+export const loginUserWithEmailOrMobileAndPassword = async (
+  email,
+  mobileNumber,
+  countryCodeId,
+  password,
+  role = EnumRoleOfUser.VENDOR
+) => {
   let user;
   if (email) {
     // Login with email
-    user = await User.findOne({ email });
+    user = await User.findOne({ email, role });
   } else if (mobileNumber && countryCodeId) {
     // Login with mobile number
     const countryCode = await countryCodeService.getCountryCodeById(countryCodeId);
     if (!countryCode) {
       throw new ApiError(httpStatus.BAD_REQUEST, 'Invalid country code');
     }
-    user = await User.findOne({ mobileNumber, countryCode: countryCode.code });
+    user = await User.findOne({ mobileNumber, countryCode: countryCode.code, role });
   } else {
     throw new ApiError(httpStatus.BAD_REQUEST, 'Email or mobile number is required');
   }

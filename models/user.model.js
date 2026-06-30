@@ -117,6 +117,9 @@ const UserSchema = new mongoose.Schema({
   facebookProvider: {
     type: OauthSchema,
   },
+  businessName: {
+    type: String,
+  },
   mobileNumber: {
     type: Number,
   },
@@ -145,6 +148,11 @@ UserSchema.statics.isEmailTaken = async function (email, excludeUserId) {
   const User = await this.findOne({ email, _id: { $ne: excludeUserId } });
   return !!User;
 };
+UserSchema.statics.isMobileNumberTaken = async function (mobileNumber, excludeUserId) {
+  const user = await this.findOne({ mobileNumber, _id: { $ne: excludeUserId } });
+  return !!user;
+};
+
 UserSchema.pre('save', async function (next) {
   const User = this;
   if (User.isModified('password')) {
@@ -159,10 +167,15 @@ UserSchema.pre('findOneAndUpdate', async function (next) {
   const update = this.getUpdate(); // {password: "..."}
   if (update && update.password) {
     const passwordHash = await bcrypt.hash(update.password, 10);
-    this.getUpdate().password = passwordHash;
+    this.setUpdate({
+      $set: {
+        password: passwordHash,
+      },
+    });
   }
   next();
 });
+
 UserSchema.post(
   ['find', 'findOne', 'findOneAndDelete', 'findOneAndRemove', 'update', 'updateOne', 'updateMany'],
   function (result, next) {

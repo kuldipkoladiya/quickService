@@ -24,7 +24,7 @@ export const registerCustomer = {
 export const register = {
   body: Joi.object()
     .keys({
-      name: Joi.string().required(),
+      name: Joi.string(),
       businessName: Joi.string().required(),
       email: Joi.string().email(),
       mobileNumber: Joi.number(),
@@ -37,6 +37,9 @@ export const login = {
     email: Joi.string().email().required(),
     password: Joi.string().required(),
     deviceToken: Joi.string().allow(''),
+    role: Joi.string()
+      .valid(...Object.values(enumFields.EnumRoleOfUser))
+      .optional(),
   }),
 };
 

@@ -9,7 +9,7 @@ import ApiError from 'utils/ApiError';
 import config from 'config/config';
 import _ from 'lodash';
 import { userService } from 'services';
-import { EnumTypeOfToken, EnumCodeTypeOfCode } from 'models/enum.model';
+import { EnumTypeOfToken, EnumCodeTypeOfCode, EnumRoleOfUser } from 'models/enum.model';
 /**
  * Generate token
  * @param {ObjectId} userId
@@ -81,8 +81,8 @@ export const verifyToken = async (token, type) => {
  * @param {string} [verificationRequest.user]
  */
 export const verifyCode = async (verificationRequest) => {
-  const { code: token, type, email } = verificationRequest;
-  const userObj = await userService.getOne({ email });
+  const { code: token, type, email, role = EnumRoleOfUser.CUSTOMER } = verificationRequest;
+  const userObj = await userService.getOne({ email, role });
   if (!userObj) {
     throw new ApiError(httpStatus.NOT_FOUND, 'No such User');
   }
@@ -99,9 +99,9 @@ export const verifyOtpCustomer = async ({ email, mobileNumber, otp }) => {
   let user;
 
   if (email) {
-    user = await userService.getOne({ email });
+    user = await userService.getOne({ email, role: EnumRoleOfUser.CUSTOMER });
   } else if (mobileNumber) {
-    user = await userService.getOne({ mobileNumber });
+    user = await userService.getOne({ mobileNumber, role: EnumRoleOfUser.CUSTOMER });
   }
 
   if (!user) {
@@ -139,9 +139,9 @@ export const verifyOtp = async ({ email, mobileNumber, otp }) => {
   let user;
 
   if (email) {
-    user = await userService.getOne({ email });
+    user = await userService.getOne({ email, role: EnumRoleOfUser.VENDOR });
   } else if (mobileNumber) {
-    user = await userService.getOne({ mobileNumber });
+    user = await userService.getOne({ mobileNumber, role: EnumRoleOfUser.VENDOR });
   }
 
   if (!user) {
@@ -179,8 +179,8 @@ const generateCode = (length) => {
  * @param {string} email
  * @returns {Promise<string>}
  */
-export const generateResetPasswordToken = async (email) => {
-  const user = await userService.getOne({ email });
+export const generateResetPasswordToken = async (email, role = EnumRoleOfUser.CUSTOMER) => {
+  const user = await userService.getOne({ email, role });
   if (!user) {
     throw new ApiError(httpStatus.NOT_FOUND, 'No users found with this email');
   }
@@ -191,8 +191,8 @@ export const generateResetPasswordToken = async (email) => {
   return resetPasswordToken;
 };
 
-export const verifyResetOtp = async (email, otp) => {
-  const user = await userService.getOne({ email });
+export const verifyResetOtp = async (email, otp, role = EnumRoleOfUser.CUSTOMER) => {
+  const user = await userService.getOne({ email, role });
   if (!user) {
     throw new ApiError(httpStatus.BAD_REQUEST, 'no user found with this email');
   }
@@ -206,8 +206,8 @@ export const verifyResetOtp = async (email, otp) => {
   return user;
 };
 
-export const verifyResetOtpVerify = async (email, otp) => {
-  const user = await userService.getOne({ email });
+export const verifyResetOtpVerify = async (email, otp, role = EnumRoleOfUser.CUSTOMER) => {
+  const user = await userService.getOne({ email, role });
   if (!user) {
     throw new ApiError(httpStatus.BAD_REQUEST, 'no user found with this email');
   }
@@ -229,8 +229,8 @@ export const verifyResetOtpVerify = async (email, otp) => {
  * @param {string} email
  * @returns {Promise<string>}
  */
-export const generateVerifyEmailToken = async (email) => {
-  const user = await userService.getOne({ email });
+export const generateVerifyEmailToken = async (email, role = EnumRoleOfUser.CUSTOMER) => {
+  const user = await userService.getOne({ email, role });
   if (!user) {
     throw new ApiError(httpStatus.NOT_FOUND, 'No users found with this email');
   } else if (user.emailVerified) {
