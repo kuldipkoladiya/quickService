@@ -135,6 +135,15 @@ const UserSchema = new mongoose.Schema({
   currentLocation: {
     type: String,
   },
+  pendingEmail: {
+    type: String,
+  },
+  pendingMobileNumber: {
+    type: Number,
+  },
+  pendingCountryCode: {
+    type: String,
+  },
 });
 UserSchema.plugin(toJSON);
 UserSchema.plugin(mongoosePaginateV2);
