@@ -67,21 +67,138 @@ export const registerCustomer = catchAsync(async (req, res) => {
 
 export const register = catchAsync(async (req, res) => {
   const { body } = req;
-  const user = await userService.createUser(body);
-  const emailVerifyToken = await tokenService.generateVerifyEmailToken(user.email);
-  emailService.sendEmailVerificationEmail(user, emailVerifyToken, 'customer').then().catch();
+
+  let userCountryCode = null;
+
+  // Check for mobile number and fetch country code only if mobile number is present
+  if (body.mobileNumber) {
+    userCountryCode = await countryCodeService.getCountryCodeById(body.countryCodeId);
+    if (!userCountryCode) {
+      throw new ApiError(
+        httpStatus.BAD_REQUEST,
+        'Please provide a valid countryCode while using registration with a mobile number.'
+      );
+    }
+  }
+
+  // Create the user object, only add countryCode if the user registered with a mobile number
+  const user = await userService.createUser({
+    ...body,
+    ...(userCountryCode && { countryCode: userCountryCode.code }), // Only include countryCode if it's present
+  });
+
+  const otp = generateOtp();
+  user.codes.push({
+    code: otp,
+    expirationDate: Date.now() + 10 * 60 * 1000, // OTP valid for 10 minutes
+    used: false,
+    codeType: EnumCodeTypeOfCode.LOGIN,
+  });
+  await user.save();
+
+  // Send OTP based on mobile or email
+  if (user.mobileNumber) {
+    // Send OTP to mobile via MSG91 API
+    try {
+      await sendOtpToMobile(`${user.countryCode}${user.mobileNumber}`, otp); // Call your function to send OTP via MSG91
+      console.log('OTP sent to mobile via MSG91');
+    } catch (error) {
+      console.error('Error sending OTP to mobile:', error);
+      return res.status(httpStatus.INTERNAL_SERVER_ERROR).send({
+        message: 'Error sending OTP to mobile',
+      });
+    }
+  } else if (user.email) {
+    // Send OTP to email
+    try {
+      await emailService.sendOtpVerificationEmail(user, otp);
+      console.log('OTP sent to email');
+    } catch (error) {
+      console.error('Error sending OTP to email:', error);
+      return res.status(httpStatus.INTERNAL_SERVER_ERROR).send({
+        message: 'Error sending OTP to email',
+      });
+    }
+  }
+
+  // Create notification for OTP
+  // const createNotificationForOtp = await Notification.create({
+  //   userId: user._id,
+  //   body: EnumOfNotification.OTP_SEND,
+  // });
+  //
+  // // console.log('Notification created for OTP:', createNotificationForOtp);
+  //
+  // // Send notification if device tokens are present
+  // if (user && user.deviceTokens && user.deviceTokens.length) {
+  //   const deviceToken = user.deviceTokens.map((fcmToken) => fcmToken.deviceToken);
+  //   await sendNotification(
+  //       deviceToken,
+  //       {
+  //         data: {
+  //           _id: createNotificationForOtp._id.toString(),
+  //           userId: createNotificationForOtp.userId.toString(),
+  //           body: EnumOfNotification.OTP_SEND,
+  //           createdAt: createNotificationForOtp.createdAt.toString(),
+  //           updatedAt: createNotificationForOtp.updatedAt.toString(),
+  //         },
+  //       },
+  //       {}
+  //   );
+  // }
+
   res.status(httpStatus.OK).send({
     results: {
       success: true,
-      message: 'Email has been sent to your registered email. Please check your email and verify it',
-      user,
+      message: 'OTP has been sent to your registered mobile or email. Please verify.',
     },
   });
 });
 export const login = catchAsync(async (req, res) => {
-  const { email, password } = req.body;
-  const { deviceToken } = req.body;
-  const user = await authService.loginUserWithEmailAndPassword(email, password);
+  const { email, password, mobileNumber, countryCodeId, deviceToken } = req.body;
+
+  // First, authenticate the user with email/password or mobile/password
+  const user = await authService.loginUserWithEmailOrMobileAndPassword(email, mobileNumber, countryCodeId, password);
+
+  // const checkUserActivePlan = await checkUserPremiumStatus(user._id);
+  // // console.log('=====xx====>', checkUserActivePlan);
+  //
+  // // Check if 2FA is enabled for this user
+  // if (user.twoFactorAuth && user.twoFactorAuth.isEnabled) {
+  //   // If 2FA is enabled but no code provided, return a response indicating 2FA is required
+  //   if (!twoFactorCode) {
+  //     if (user.twoFactorAuth.method === EnumOf2faMethod.OTP) {
+  //       await generateAndSendOtp(user);
+  //       return res.status(httpStatus.BAD_REQUEST).send({
+  //         requireTwoFactor: true,
+  //         method: user.twoFactorAuth.method,
+  //         message: 'Two-factor authentication code required',
+  //         userId: user.id,
+  //         email: maskEmail(user.email),
+  //         mobileNumber: maskMobileNumber(user.mobileNumber),
+  //         otpType: user.twoFactorAuth.otpType,
+  //       });
+  //     }
+  //     return res.status(httpStatus.BAD_REQUEST).send({
+  //       requireTwoFactor: true,
+  //       method: user.twoFactorAuth.method,
+  //       message: 'Two-factor authentication code required',
+  //       userId: user.id,
+  //     });
+  //   }
+  //
+  //   // Verify the 2FA code based on method
+  //   const isValid = await twoFactorAuthService.verifyToken(user, twoFactorCode);
+  //   if (!isValid) {
+  //     return res.status(httpStatus.UNAUTHORIZED).send({
+  //       requireTwoFactor: true,
+  //       method: user.twoFactorAuth.method,
+  //       message: 'Invalid two-factor authentication code',
+  //     });
+  //   }
+  // }
+
+  // If 2FA is not enabled or code is valid, proceed with login
   const tokens = await tokenService.generateAuthTokens(user);
   if (deviceToken) {
     const updatedUser = await userService.addDeviceToken(user, req.body);
@@ -166,6 +283,52 @@ export const verifyOtpCustomer = catchAsync(async (req, res) => {
       tokens,
     },
   });
+});
+export const verifyOtpVendor = catchAsync(async (req, res) => {
+  const { otp, email, mobileNumber, deviceToken } = req.body;
+
+  // Pass both to allow fallback
+  await tokenService.verifyOtp({ email, mobileNumber, otp });
+
+  const user = await userService.getOne(email ? { email } : { mobileNumber });
+
+  const tokens = await tokenService.generateAuthTokens(user);
+
+  let updatedUser = user;
+
+  if (deviceToken) {
+    updatedUser = await userService.addDeviceToken(user, req.body);
+  }
+
+  // // Send congratulation email
+  // await emailService.sendCongratulationEmail(user);
+  //
+  // // Create notification in DB
+  // const createNotificationForCongratulation = await Notification.create({
+  //   userId: updatedUser._id,
+  //   body: EnumOfNotification.CONGRATULATION,
+  // });
+  //
+  // // Send push notification if user has device tokens
+  // if (updatedUser.deviceTokens && updatedUser.deviceTokens.length) {
+  //   const deviceTokens = updatedUser.deviceTokens.map((fcmToken) => fcmToken.deviceToken);
+  //
+  //   await sendNotification(
+  //       deviceTokens,
+  //       {
+  //         data: {
+  //           _id: createNotificationForCongratulation._id.toString(),
+  //           userId: createNotificationForCongratulation.userId.toString(),
+  //           body: EnumOfNotification.CONGRATULATION,
+  //           createdAt: createNotificationForCongratulation.createdAt.toString(),
+  //           updatedAt: createNotificationForCongratulation.updatedAt.toString(),
+  //         },
+  //       },
+  //       {}
+  //   );
+  // }
+
+  return res.status(httpStatus.OK).send({ results: { user: updatedUser, tokens } });
 });
 export const verifyOtp = catchAsync(async (req, res) => {
   const { body } = req;

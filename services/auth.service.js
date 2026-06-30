@@ -5,7 +5,7 @@ import httpStatus from 'http-status';
 import ApiError from 'utils/ApiError';
 import _ from 'lodash';
 import { User, Token } from 'models';
-import { userService, tokenService, emailService } from 'services';
+import { userService, tokenService, emailService, countryCodeService } from 'services';
 import { EnumTypeOfToken, EnumCodeTypeOfCode } from 'models/enum.model';
 import bcrypt from 'bcryptjs';
 import { generateOtp } from 'utils/common';
@@ -208,4 +208,37 @@ export const createSocialUser = async (accessToken, refreshToken, profile, provi
       upsert: true,
     });
   });
+};
+
+export const loginUserWithEmailOrMobileAndPassword = async (email, mobileNumber, countryCodeId, password) => {
+  let user;
+  if (email) {
+    // Login with email
+    user = await User.findOne({ email });
+  } else if (mobileNumber && countryCodeId) {
+    // Login with mobile number
+    const countryCode = await countryCodeService.getCountryCodeById(countryCodeId);
+    if (!countryCode) {
+      throw new ApiError(httpStatus.BAD_REQUEST, 'Invalid country code');
+    }
+    user = await User.findOne({ mobileNumber, countryCode: countryCode.code });
+  } else {
+    throw new ApiError(httpStatus.BAD_REQUEST, 'Email or mobile number is required');
+  }
+  if (!user) {
+    throw new ApiError(httpStatus.BAD_REQUEST, 'Incorrect email or password');
+  }
+  // if (Array.isArray(user.profileHideAndDelete) && user.profileHideAndDelete.some((item) => item.isProfileDelete === true)) {
+  //   throw new ApiError(httpStatus.BAD_REQUEST, 'Your account has been deleted.');
+  // }
+  const isValid = await bcrypt.compare(password, user.password);
+
+  if (!isValid) {
+    throw new ApiError(httpStatus.BAD_REQUEST, 'Incorrect email or password');
+  }
+  if (!user.emailVerified) {
+    throw new ApiError(httpStatus.BAD_REQUEST, 'Please check your email and verify it to continue login in to app');
+  }
+
+  return user;
 };

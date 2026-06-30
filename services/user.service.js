@@ -24,10 +24,10 @@ export async function updateUserForAuth(filter, body, options = {}, user) {
   }
 
   // --- Hash password if provided ---
-  // if (body && body.password) {
-  //   // eslint-disable-next-line no-param-reassign
-  //   body.password = await bcrypt.hash(body.password, 10);
-  // }
+  if (body && body.password) {
+    // eslint-disable-next-line no-param-reassign,no-undef
+    body.password = await bcrypt.hash(body.password, 10);
+  }
 
   // --- Update user ---
   await User.updateOne(filter, body, options);

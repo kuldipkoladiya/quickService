@@ -37,6 +37,11 @@ router.post('/send-verify-otp', validate(authValidation.sendVerifyEmail), authCo
  */
 router.post('/verify-otp-customer', validate(authValidation.verifyOtp), authController.verifyOtpCustomer);
 /**
+ * OTP-based verification for email
+ * Verify OTP for successfully Signup
+ */
+router.post('/verify-otp-vendor', validate(authValidation.verifyOtp), authController.verifyOtpVendor);
+/**
  * OTP-based verification
  * Verify OTP for successfully Signup
  */

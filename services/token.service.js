@@ -135,22 +135,32 @@ export const verifyOtpCustomer = async ({ email, mobileNumber, otp }) => {
 
   return user;
 };
-export const verifyOtp = async (email, otp) => {
-  const user = await userService.getOne({ email });
+export const verifyOtp = async ({ email, mobileNumber, otp }) => {
+  let user;
+
+  if (email) {
+    user = await userService.getOne({ email });
+  } else if (mobileNumber) {
+    user = await userService.getOne({ mobileNumber });
+  }
+
   if (!user) {
-    throw new ApiError(httpStatus.BAD_REQUEST, 'no user found with this email');
+    throw new ApiError(httpStatus.BAD_REQUEST, 'No user found with this email or mobile number');
   }
+
   if (user.emailVerified) {
-    throw new ApiError(httpStatus.BAD_REQUEST, 'your email is already verified!');
+    throw new ApiError(httpStatus.BAD_REQUEST, 'Your email is already verified!');
   }
-  // eslint-disable-next-line eqeqeq
-  const otpCode = _.find(user.codes, (code) => code.code === otp && code.codeType === EnumCodeTypeOfCode.LOGIN);
+  // eslint-disable-next-line
+  const otpCode = _.find(user.codes, (code) => code.code == otp && code.codeType === EnumCodeTypeOfCode.LOGIN);
   if (!otpCode || otpCode.expirationDate < Date.now()) {
     throw new ApiError(httpStatus.BAD_REQUEST, 'otp is Invalid');
   }
+
   user.codes = _.filter(user.codes, (code) => code.code !== otp);
   user.emailVerified = true;
   user.active = true;
+
   return user.save();
 };
 
