@@ -11,6 +11,7 @@ export const getAddress = catchAsync(async (req, res) => {
   const { addressId } = req.params;
   const filter = {
     _id: addressId,
+    userId: req.user._id,
   };
   const options = {};
   const address = await addressService.getOne(filter, options);
@@ -18,14 +19,18 @@ export const getAddress = catchAsync(async (req, res) => {
 });
 
 export const listAddress = catchAsync(async (req, res) => {
-  const filter = {};
+  const filter = {
+    userId: req.user._id,
+  };
   const options = {};
   const address = await addressService.getAddressList(filter, options);
   return res.status(httpStatus.OK).send({ results: address });
 });
 
 export const paginateAddress = catchAsync(async (req, res) => {
-  const filter = {};
+  const filter = {
+    userId: req.user._id,
+  };
   const options = {};
   const address = await addressService.getAddressListWithPagination(filter, options);
   return res.status(httpStatus.OK).send({ results: address });
@@ -35,6 +40,9 @@ export const createAddress = catchAsync(async (req, res) => {
   const { body } = req;
   body.createdBy = req.user._id;
   body.updatedBy = req.user._id;
+  if (!body.userId) {
+    body.userId = req.user._id;
+  }
   const options = {};
   const address = await addressService.createAddress(body, options);
   return res.status(httpStatus.CREATED).send({ results: address });
@@ -46,6 +54,7 @@ export const updateAddress = catchAsync(async (req, res) => {
   const { addressId } = req.params;
   const filter = {
     _id: addressId,
+    userId: req.user._id,
   };
   const options = { new: true };
   const address = await addressService.updateAddress(filter, body, options);
@@ -56,6 +65,7 @@ export const removeAddress = catchAsync(async (req, res) => {
   const { addressId } = req.params;
   const filter = {
     _id: addressId,
+    userId: req.user._id,
   };
   const address = await addressService.removeAddress(filter);
   return res.status(httpStatus.OK).send({ results: address });

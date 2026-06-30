@@ -1,6 +1,7 @@
 import express from 'express';
 import userRoutes from './v1/user/user.route';
 import addressRoutes from './v1/address/address.route';
+import businessAddressRoutes from './v1/businessAddress/businessAddress.route';
 import bankRoutes from './v1/bank/bank.route';
 import vendorUserRoutes from './v1/vendorUser/vendorUser.route';
 import vendorKycRoutes from './v1/vendorKyc/vendorKyc.route';
@@ -25,6 +26,7 @@ import favoriteVendorRoutes from './v1/favoriteVendor/favoriteVendor.route';
 const router = express.Router();
 router.use('/user', userRoutes);
 router.use('/address', addressRoutes);
+router.use('/businessAddress', businessAddressRoutes);
 router.use('/bank', bankRoutes);
 router.use('/vendorUser', vendorUserRoutes);
 router.use('/vendorKyc', vendorKycRoutes);

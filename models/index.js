@@ -3,6 +3,7 @@
  */
 module.exports.User = require('./user.model');
 module.exports.Address = require('./address.model');
+module.exports.BusinessAddress = require('./businessAddress.model');
 module.exports.Bank = require('./bank.model');
 module.exports.VendorUser = require('./vendorUser.model');
 module.exports.VendorKyc = require('./vendorKyc.model');

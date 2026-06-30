@@ -10,7 +10,7 @@ Joi.objectId = require('joi-objectid')(Joi);
 export const createAddress = {
   body: Joi.object().keys({
     address: Joi.string(),
-    userId: Joi.objectId().required(),
+    userId: Joi.objectId().optional(),
     floor: Joi.string(),
     locationType: Joi.string().valid(...Object.values(enumFields.EnumLocationTypeOfAddress)),
     landmark: Joi.string(),

@@ -3,6 +3,7 @@
  */
 module.exports.userController = require('./user.controller');
 module.exports.addressController = require('./address.controller');
+module.exports.businessAddressController = require('./businessAddress.controller');
 module.exports.bankController = require('./bank.controller');
 module.exports.vendorUserController = require('./vendorUser.controller');
 module.exports.vendorKycController = require('./vendorKyc.controller');

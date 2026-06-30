@@ -7,6 +7,7 @@ module.exports.userService = require('./user.service');
 module.exports.addressService = require('./address.service');
 module.exports.addressService = require('./address.service');
 module.exports.addressService = require('./address.service');
+module.exports.businessAddressService = require('./businessAddress.service');
 module.exports.bankService = require('./bank.service');
 module.exports.bankService = require('./bank.service');
 module.exports.bankService = require('./bank.service');
