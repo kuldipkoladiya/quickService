@@ -5,6 +5,10 @@
 import ApiError from 'utils/ApiError';
 import httpStatus from 'http-status';
 import { VendorUser, User, Bank } from 'models';
+import { generateOtp } from 'utils/common';
+import { countryCodeService, emailService } from 'services';
+import { EnumCodeTypeOfCode } from 'models/enum.model';
+import { sendOtpToMobile } from './mobileotp.service';
 
 export async function getVendorUserById(id, options = {}) {
   const vendorUser = await VendorUser.findById(id, options.projection, options);
@@ -26,7 +30,7 @@ export async function getVendorUserListWithPagination(filter, options = {}) {
   return vendorUser;
 }
 
-export async function createVendorUser(body, options = {}) {
+export async function createVendorUser(body = {}) {
   if (body.userId) {
     const userId = await User.findOne({ _id: body.userId });
     if (!userId) {
@@ -80,11 +84,119 @@ export async function aggregateVendorUser(query) {
   return vendorUser;
 }
 
-export async function aggregateVendorUserWithPagination(query, options = {}) {
-  const aggregate = VendorUser.aggregate();
-  query.map((obj) => {
-    aggregate._pipeline.push(obj);
-  });
-  const vendorUser = await VendorUser.aggregatePaginate(aggregate, options);
-  return vendorUser;
+// export async function aggregateVendorUserWithPagination(query, options = {}) {
+//   const aggregate = VendorUser.aggregate();
+//   query.map((obj) => {
+//     aggregate._pipeline.push(obj);
+//   });
+//   const vendorUser = await VendorUser.aggregatePaginate(aggregate, options);
+//   return vendorUser;
+// }
+
+export async function updateVendorProfile(user, body) {
+  const { name, email, mobileNumber, countryCodeId, profileImage, businessName, gstNumber } = body;
+
+  // 1. Update VendorUser details
+  const vendorUserUpdate = {};
+  if (businessName !== undefined) vendorUserUpdate.businessName = businessName;
+  if (gstNumber !== undefined) vendorUserUpdate.gstNumber = gstNumber;
+
+  const updatedVendorUser = await VendorUser.findOneAndUpdate(
+    { userId: user._id },
+    { $set: vendorUserUpdate, userId: user._id },
+    { new: true, upsert: true }
+  );
+
+  // 2. Update normal User fields
+  const userUpdate = {};
+  if (name !== undefined) {
+    userUpdate.name = name;
+    userUpdate.fullName = name;
+  }
+  if (profileImage !== undefined) userUpdate.profileImage = profileImage;
+  if (businessName !== undefined) userUpdate.businessName = businessName;
+
+  if (Object.keys(userUpdate).length) {
+    Object.assign(user, userUpdate);
+    await user.save();
+  }
+
+  // 3. Handle Email Update Verification
+  if (email && email !== user.email) {
+    const exists = await User.findOne({
+      email,
+      _id: { $ne: user._id },
+    });
+
+    if (exists) {
+      throw new ApiError(httpStatus.BAD_REQUEST, 'Email already taken');
+    }
+
+    const otp = generateOtp();
+    user.codes.push({
+      code: String(otp),
+      codeType: EnumCodeTypeOfCode.EMAIL,
+      expirationDate: new Date(Date.now() + 10 * 60 * 1000),
+      used: false,
+    });
+    // eslint-disable-next-line no-param-reassign
+    user.pendingEmail = email;
+    await user.save();
+
+    await emailService.sendOtpVerificationEmail({ email }, otp);
+
+    return {
+      user,
+      vendorUser: updatedVendorUser,
+      verifyRequired: true,
+      verifyType: 'email',
+      message: 'OTP sent to email. Please verify.',
+    };
+  }
+
+  // 4. Handle Mobile Update Verification
+  if (mobileNumber && mobileNumber !== user.mobileNumber) {
+    const country = await countryCodeService.getCountryCodeById(countryCodeId);
+    if (!country) {
+      throw new ApiError(httpStatus.BAD_REQUEST, 'Valid countryCodeId required');
+    }
+
+    const exists = await User.findOne({
+      mobileNumber,
+      _id: { $ne: user._id },
+    });
+    if (exists) {
+      throw new ApiError(httpStatus.BAD_REQUEST, 'Mobile number already taken');
+    }
+
+    const otp = generateOtp();
+    user.codes.push({
+      code: String(otp),
+      codeType: EnumCodeTypeOfCode.MOBILE,
+      expirationDate: new Date(Date.now() + 10 * 60 * 1000),
+      used: false,
+    });
+    // eslint-disable-next-line no-param-reassign
+    user.pendingMobileNumber = mobileNumber;
+    // eslint-disable-next-line no-param-reassign
+    user.pendingCountryCode = country.code;
+    await user.save();
+
+    await sendOtpToMobile(`${country.code}${mobileNumber}`, otp);
+
+    return {
+      user,
+      vendorUser: updatedVendorUser,
+      verifyRequired: true,
+      verifyType: 'mobile',
+      message: 'OTP sent to mobile. Please verify.',
+    };
+  }
+
+  return {
+    user,
+    vendorUser: updatedVendorUser,
+    verifyRequired: false,
+    message: 'Profile updated successfully',
+  };
 }

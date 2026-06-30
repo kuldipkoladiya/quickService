@@ -2,7 +2,7 @@ import httpStatus from 'http-status';
 import { generateOtp } from 'utils/common';
 import ApiError from 'utils/ApiError';
 import { catchAsync } from 'utils/catchAsync';
-import { authService, tokenService, userService, emailService, countryCodeService } from 'services';
+import { authService, tokenService, userService, emailService, countryCodeService, vendorUserService } from 'services';
 
 import { EnumTypeOfToken, EnumCodeTypeOfCode, EnumRoleOfUser } from 'models/enum.model';
 import { sendOtpToMobile } from '../../services/mobileotp.service';
@@ -216,12 +216,22 @@ export const login = catchAsync(async (req, res) => {
 
   // If 2FA is not enabled or code is valid, proceed with login
   const tokens = await tokenService.generateAuthTokens(user);
-  if (deviceToken) {
-    const updatedUser = await userService.addDeviceToken(user, req.body);
-    res.status(httpStatus.OK).send({ results: { user: updatedUser, tokens } });
-  } else {
-    res.status(httpStatus.OK).send({ results: { user, tokens } });
+  let vendorUser = null;
+  if (user.role === EnumRoleOfUser.VENDOR) {
+    vendorUser = await vendorUserService.getOne({ userId: user._id });
   }
+
+  let finalUser = user;
+  if (deviceToken) {
+    finalUser = await userService.addDeviceToken(user, req.body);
+  }
+
+  const userJson = finalUser.toJSON();
+  if (vendorUser) {
+    userJson.vendorUser = vendorUser;
+  }
+
+  res.status(httpStatus.OK).send({ results: { user: userJson, tokens, ...(vendorUser && { vendorUser }) } });
 });
 
 // if user's email is not verified then we call this function for reverification
@@ -319,35 +329,14 @@ export const verifyOtpVendor = catchAsync(async (req, res) => {
     updatedUser = await userService.addDeviceToken(user, req.body);
   }
 
-  // // Send congratulation email
-  // await emailService.sendCongratulationEmail(user);
-  //
-  // // Create notification in DB
-  // const createNotificationForCongratulation = await Notification.create({
-  //   userId: updatedUser._id,
-  //   body: EnumOfNotification.CONGRATULATION,
-  // });
-  //
-  // // Send push notification if user has device tokens
-  // if (updatedUser.deviceTokens && updatedUser.deviceTokens.length) {
-  //   const deviceTokens = updatedUser.deviceTokens.map((fcmToken) => fcmToken.deviceToken);
-  //
-  //   await sendNotification(
-  //       deviceTokens,
-  //       {
-  //         data: {
-  //           _id: createNotificationForCongratulation._id.toString(),
-  //           userId: createNotificationForCongratulation.userId.toString(),
-  //           body: EnumOfNotification.CONGRATULATION,
-  //           createdAt: createNotificationForCongratulation.createdAt.toString(),
-  //           updatedAt: createNotificationForCongratulation.updatedAt.toString(),
-  //         },
-  //       },
-  //       {}
-  //   );
-  // }
+  const vendorUser = await vendorUserService.getOne({ userId: updatedUser._id });
 
-  return res.status(httpStatus.OK).send({ results: { user: updatedUser, tokens } });
+  const userJson = updatedUser.toJSON();
+  if (vendorUser) {
+    userJson.vendorUser = vendorUser;
+  }
+
+  return res.status(httpStatus.OK).send({ results: { user: userJson, tokens, ...(vendorUser && { vendorUser }) } });
 });
 export const verifyOtp = catchAsync(async (req, res) => {
   const { body } = req;

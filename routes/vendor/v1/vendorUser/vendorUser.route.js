@@ -21,6 +21,11 @@ router
    * getVendorUserPaginated
    * */
   .get(auth('vendor'), validate(vendorUserValidation.paginatedVendorUser), vendorUserController.paginateVendorUser);
+
+router
+  .route('/update-profile')
+  .put(auth('vendor'), validate(vendorUserValidation.updateProfile), vendorUserController.updateProfile);
+
 router
   .route('/:vendorUserId')
   /**

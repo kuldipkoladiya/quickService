@@ -137,12 +137,15 @@ const UserSchema = new mongoose.Schema({
   },
   pendingEmail: {
     type: String,
+    private: true,
   },
   pendingMobileNumber: {
     type: Number,
+    private: true,
   },
   pendingCountryCode: {
     type: String,
+    private: true,
   },
 });
 UserSchema.plugin(toJSON);

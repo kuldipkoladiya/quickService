@@ -79,3 +79,15 @@ export const paginatedVendorUser = {
     })
     .unknown(true),
 };
+
+export const updateProfile = {
+  body: Joi.object().keys({
+    name: Joi.string().optional(),
+    email: Joi.string().email().optional(),
+    mobileNumber: Joi.number().optional(),
+    countryCodeId: Joi.string().optional(),
+    profileImage: Joi.string().optional(),
+    businessName: Joi.string().optional(),
+    gstNumber: Joi.string().optional(),
+  }),
+};
