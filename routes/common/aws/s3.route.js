@@ -9,4 +9,6 @@ const router = express();
  * Create pre-signed url Api
  * */
 router.post('/presignedurl', auth(), validate(s3Validation.preSignedPutUrl), s3Controller.preSignedPutUrl);
+
+router.post('/profilepic', auth(), validate(s3Validation.UserProfilePic), s3Controller.UserProfilePic);
 module.exports = router;

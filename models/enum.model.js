@@ -109,6 +109,15 @@ const EnumTypeOfToken = {
   VERIFY_EMAIL: 'verifyEmail',
   REFRESH: 'refresh',
 };
+const EnumOfImageTypes = {
+  LISTING: 'listing',
+  PROFILE_IMAGE: 'profileImage',
+  STATUS_IMAGE: 'statusImage',
+  PROFILE_VIDEO: 'profileVideo',
+  BUSINESS_COVER: 'businessCover',
+  SELLERSIGN: 'sellerSing',
+  BANNER: 'banner',
+};
 module.exports = {
   EnumRoleOfUser,
   EnumCodeTypeOfCode,
@@ -130,4 +139,5 @@ module.exports = {
   EnumStatusOfBookingTracking,
   EnumTypeOfPoint,
   EnumTypeOfToken,
+  EnumOfImageTypes,
 };
