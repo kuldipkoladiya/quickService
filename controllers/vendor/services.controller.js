@@ -5,7 +5,6 @@
 import httpStatus from 'http-status';
 import { servicesService } from 'services';
 import { catchAsync } from 'utils/catchAsync';
-import { pick } from '../../utils/pick';
 
 export const getServices = catchAsync(async (req, res) => {
   const { servicesId } = req.params;
@@ -58,5 +57,15 @@ export const removeServices = catchAsync(async (req, res) => {
     _id: servicesId,
   };
   const services = await servicesService.removeServices(filter);
+  return res.status(httpStatus.OK).send({ results: services });
+});
+
+export const getServicesByCategory = catchAsync(async (req, res) => {
+  const { categoryId } = req.params;
+  const filter = {
+    categoryId,
+  };
+  const options = {};
+  const services = await servicesService.getServicesList(filter, options);
   return res.status(httpStatus.OK).send({ results: services });
 });

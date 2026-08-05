@@ -11,7 +11,6 @@ export const createServices = {
     categoryId: Joi.objectId(),
     title: Joi.string(),
     description: Joi.string(),
-    duration: Joi.number().integer(),
     isActive: Joi.bool(),
   }),
 };
@@ -21,7 +20,6 @@ export const updateServices = {
     categoryId: Joi.objectId(),
     title: Joi.string(),
     description: Joi.string(),
-    duration: Joi.number().integer(),
     isActive: Joi.bool(),
   }),
   params: Joi.object().keys({
@@ -59,4 +57,10 @@ export const paginatedServices = {
       limit: Joi.number().default(10).max(100),
     })
     .unknown(true),
+};
+
+export const getServicesByCategory = {
+  params: Joi.object().keys({
+    categoryId: Joi.objectId().required(),
+  }),
 };

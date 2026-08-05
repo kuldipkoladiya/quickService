@@ -3,6 +3,7 @@
  * Only fields name will be overwritten, if the field name will be changed.
  */
 import Joi from 'joi';
+import enumFields from 'models/enum.model';
 
 Joi.objectId = require('joi-objectid')(Joi);
 
@@ -10,6 +11,7 @@ export const createVendorService = {
   body: Joi.object().keys({
     vendorId: Joi.objectId(),
     serviceId: Joi.objectId(),
+    pricingType: Joi.string().valid(...Object.values(enumFields.EnumPricingType)),
     price: Joi.number().integer(),
     estimatedTime: Joi.number().integer(),
     isAvailable: Joi.bool(),
@@ -20,6 +22,7 @@ export const updateVendorService = {
   body: Joi.object().keys({
     vendorId: Joi.objectId(),
     serviceId: Joi.objectId(),
+    pricingType: Joi.string().valid(...Object.values(enumFields.EnumPricingType)),
     price: Joi.number().integer(),
     estimatedTime: Joi.number().integer(),
     isAvailable: Joi.bool(),

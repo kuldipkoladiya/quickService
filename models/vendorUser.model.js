@@ -54,6 +54,13 @@ const VendorUserSchema = new mongoose.Schema(
     serviceRadius: {
       type: Number,
     },
+    visitCharges: [
+      {
+        minDistance: { type: Number },
+        maxDistance: { type: Number },
+        charge: { type: Number },
+      }
+    ],
     isKycVerified: {
       type: Boolean,
     },

@@ -29,6 +29,11 @@ export async function createServices(body, options = {}) {
   return services;
 }
 
+export async function createManyServices(bodies) {
+  const services = await Services.insertMany(bodies);
+  return services;
+}
+
 export async function updateServices(filter, body, options = {}) {
   const services = await Services.findOneAndUpdate(filter, body, options);
   return services;

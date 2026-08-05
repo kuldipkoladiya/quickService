@@ -60,3 +60,21 @@ export const removeServices = catchAsync(async (req, res) => {
   const services = await servicesService.removeServices(filter);
   return res.status(httpStatus.OK).send({ results: services });
 });
+
+export const createBulkServices = catchAsync(async (req, res) => {
+  const { categoryId, services } = req.body;
+  // const createdBy = req.user._id;
+  // const updatedBy = req.user._id;
+
+  const servicesToInsert = services.map((srv) => ({
+    categoryId,
+    title: srv.title,
+    description: srv.description,
+    isActive: srv.isActive !== undefined ? srv.isActive : true,
+    // createdBy,
+    // updatedBy,
+  }));
+
+  const results = await servicesService.createManyServices(servicesToInsert);
+  return res.status(httpStatus.CREATED).send({ results });
+});

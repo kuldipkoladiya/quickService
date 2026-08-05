@@ -6,6 +6,7 @@
  */
 import mongoose from 'mongoose';
 import mongoosePaginateV2 from 'mongoose-paginate-v2';
+import enumModel from './enum.model';
 import { toJSON, softDelete } from './plugins';
 
 const VendorServiceSchema = new mongoose.Schema(
@@ -31,6 +32,11 @@ const VendorServiceSchema = new mongoose.Schema(
     serviceId: {
       type: mongoose.Schema.Types.ObjectId,
       ref: 'Services',
+    },
+    pricingType: {
+      type: String,
+      enum: Object.values(enumModel.EnumPricingType),
+      default: enumModel.EnumPricingType.FIXED,
     },
     price: {
       type: Number,

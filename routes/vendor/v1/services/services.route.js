@@ -22,6 +22,16 @@ router
    * */
   .get(auth('vendor'), validate(servicesValidation.paginatedServices), servicesController.paginateServices);
 router
+  .route('/category/:categoryId')
+  /**
+   * getServicesByCategory
+   * */
+  .get(
+    auth('vendor'),
+    validate(servicesValidation.getServicesByCategory),
+    servicesController.getServicesByCategory
+  );
+router
   .route('/:servicesId')
   /**
    * getServicesById

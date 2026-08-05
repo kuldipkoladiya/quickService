@@ -118,6 +118,10 @@ const EnumOfImageTypes = {
   SELLERSIGN: 'sellerSing',
   BANNER: 'banner',
 };
+const EnumPricingType = {
+  FIXED: 'fixed',
+  VISITING: 'visiting',
+};
 module.exports = {
   EnumRoleOfUser,
   EnumCodeTypeOfCode,
@@ -140,4 +144,5 @@ module.exports = {
   EnumTypeOfPoint,
   EnumTypeOfToken,
   EnumOfImageTypes,
+  EnumPricingType,
 };

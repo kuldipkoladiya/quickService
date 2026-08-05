@@ -16,6 +16,12 @@ router
    * */
   .get(auth('admin'), validate(servicesValidation.getServices), servicesController.listServices);
 router
+  .route('/bulk')
+  /**
+   * createBulkServices
+   * */
+  .post(validate(servicesValidation.createBulkServices), servicesController.createBulkServices);
+router
   .route('/paginated')
   /**
    * getServicesPaginated

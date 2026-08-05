@@ -17,6 +17,13 @@ export const createVendorUser = {
     rating: Joi.number().integer(),
     totalReviews: Joi.number().integer(),
     serviceRadius: Joi.number().integer(),
+    visitCharges: Joi.array().items(
+      Joi.object().keys({
+        minDistance: Joi.number().required(),
+        maxDistance: Joi.number().required(),
+        charge: Joi.number().required(),
+      })
+    ),
     isKycVerified: Joi.bool(),
     kycStatus: Joi.string().valid(...Object.values(enumFields.EnumKycStatusOfVendorUser)),
     bankDetailsId: Joi.objectId(),
@@ -36,6 +43,13 @@ export const updateVendorUser = {
     rating: Joi.number().integer(),
     totalReviews: Joi.number().integer(),
     serviceRadius: Joi.number().integer(),
+    visitCharges: Joi.array().items(
+      Joi.object().keys({
+        minDistance: Joi.number().required(),
+        maxDistance: Joi.number().required(),
+        charge: Joi.number().required(),
+      })
+    ),
     isKycVerified: Joi.bool(),
     kycStatus: Joi.string().valid(...Object.values(enumFields.EnumKycStatusOfVendorUser)),
     bankDetailsId: Joi.objectId(),
