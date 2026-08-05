@@ -556,3 +556,62 @@ export const verifyUpdateOtp = catchAsync(async (req, res) => {
     user,
   });
 });
+
+export const resendOtpVendor = catchAsync(async (req, res) => {
+  const { email, mobileNumber } = req.body;
+
+  let user;
+  if (email) {
+    user = await userService.getOne({ email, role: EnumRoleOfUser.VENDOR });
+  } else if (mobileNumber) {
+    user = await userService.getOne({ mobileNumber, role: EnumRoleOfUser.VENDOR });
+  }
+
+  if (!user) {
+    throw new ApiError(httpStatus.BAD_REQUEST, 'No vendor user found with this email or mobile number');
+  }
+
+  if (user.emailVerified) {
+    throw new ApiError(httpStatus.BAD_REQUEST, 'Your account is already verified!');
+  }
+
+  const otp = generateOtp();
+
+  user.codes.push({
+    code: String(otp),
+    expirationDate: Date.now() + 10 * 60 * 1000,
+    used: false,
+    codeType: EnumCodeTypeOfCode.LOGIN,
+  });
+
+  await user.save();
+
+  if (user.mobileNumber) {
+    try {
+      await sendOtpToMobile(`${user.countryCode}${user.mobileNumber}`, otp);
+      console.log('OTP resent to mobile via MSG91');
+    } catch (error) {
+      console.error('Error resending OTP to mobile:', error);
+      return res.status(httpStatus.INTERNAL_SERVER_ERROR).send({
+        message: 'Error sending OTP to mobile',
+      });
+    }
+  } else if (user.email) {
+    try {
+      await emailService.sendOtpVerificationEmail(user, otp);
+      console.log('OTP resent to email');
+    } catch (error) {
+      console.error('Error resending OTP to email:', error);
+      return res.status(httpStatus.INTERNAL_SERVER_ERROR).send({
+        message: 'Error sending OTP to email',
+      });
+    }
+  }
+
+  res.status(httpStatus.OK).send({
+    results: {
+      success: true,
+      message: 'OTP has been resent to your registered mobile or email. Please verify.',
+    },
+  });
+});

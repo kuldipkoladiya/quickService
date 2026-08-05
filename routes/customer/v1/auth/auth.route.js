@@ -42,6 +42,10 @@ router.post('/verify-otp-customer', validate(authValidation.verifyOtp), authCont
  */
 router.post('/verify-otp-vendor', validate(authValidation.verifyOtp), authController.verifyOtpVendor);
 /**
+ * OTP-based resend for vendor
+ */
+router.post('/resend-otp-vendor', validate(authValidation.resendOtpVendor), authController.resendOtpVendor);
+/**
  * OTP-based verification
  * Verify OTP for successfully Signup
  */

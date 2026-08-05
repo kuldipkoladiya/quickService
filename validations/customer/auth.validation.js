@@ -171,3 +171,15 @@ export const updateDeviceToken = {
     deviceToken: Joi.string().required(),
   }),
 };
+
+export const resendOtpVendor = {
+  body: Joi.object()
+    .keys({
+      email: Joi.string().email(),
+      mobileNumber: Joi.string().pattern(/^\d+$/),
+    })
+    .or('email', 'mobileNumber')
+    .messages({
+      'object.missing': 'Please provide either email or mobileNumber to resend OTP',
+    }),
+};
