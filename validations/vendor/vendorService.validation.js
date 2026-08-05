@@ -20,7 +20,11 @@ export const createVendorService = {
         pricingType: Joi.string()
           .valid(...Object.values(enumFields.EnumPricingType))
           .required(),
-        price: Joi.number().integer().required(),
+        price: Joi.number().integer().when('pricingType', {
+          is: enumFields.EnumPricingType.VISITING,
+          then: Joi.optional(),
+          otherwise: Joi.required(),
+        }),
         isAvailable: Joi.bool(),
       })
     ),
