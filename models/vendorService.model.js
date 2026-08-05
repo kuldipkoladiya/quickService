@@ -44,9 +44,6 @@ const VendorServiceSchema = new mongoose.Schema(
     /**
      * minutes
      * */
-    estimatedTime: {
-      type: Number,
-    },
     isAvailable: {
       type: Boolean,
       default: true,

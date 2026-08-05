@@ -5,7 +5,6 @@
 import httpStatus from 'http-status';
 import { vendorServiceService } from 'services';
 import { catchAsync } from 'utils/catchAsync';
-import { pick } from '../../utils/pick';
 
 export const getVendorService = catchAsync(async (req, res) => {
   const { vendorServiceId } = req.params;

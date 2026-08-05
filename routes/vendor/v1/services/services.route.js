@@ -26,11 +26,7 @@ router
   /**
    * getServicesByCategory
    * */
-  .get(
-    auth('vendor'),
-    validate(servicesValidation.getServicesByCategory),
-    servicesController.getServicesByCategory
-  );
+  .get(auth('vendor'), validate(servicesValidation.getServicesByCategory), servicesController.getServicesByCategory);
 router
   .route('/:servicesId')
   /**

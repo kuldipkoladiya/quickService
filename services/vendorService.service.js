@@ -27,19 +27,86 @@ export async function getVendorServiceListWithPagination(filter, options = {}) {
 }
 
 export async function createVendorService(body, options = {}) {
-  if (body.vendorId) {
-    const vendorId = await VendorUser.findOne({ _id: body.vendorId });
+  const payload = { ...body };
+  const opts = options; // eslint-disable-line no-unused-vars
+
+  if (!payload.vendorId && payload.createdBy) {
+    const vendorUser = await VendorUser.findOne({ userId: payload.createdBy });
+    if (vendorUser) {
+      payload.vendorId = vendorUser._id;
+    }
+  }
+
+  if (payload.vendorId) {
+    const vendorId = await VendorUser.findOne({ _id: payload.vendorId });
     if (!vendorId) {
       throw new ApiError(httpStatus.BAD_REQUEST, 'field vendorId is not valid');
     }
   }
-  if (body.serviceId) {
-    const serviceId = await Services.findOne({ _id: body.serviceId });
-    if (!serviceId) {
+
+  if (payload.services && Array.isArray(payload.services)) {
+    const results = [];
+    for (let i = 0; i < payload.services.length; i += 1) {
+      const serviceItem = payload.services[i];
+      // eslint-disable-next-line no-await-in-loop
+      const serviceIdObj = await Services.findOne({ _id: serviceItem.serviceId });
+      if (!serviceIdObj) {
+        throw new ApiError(httpStatus.BAD_REQUEST, `field serviceId ${serviceItem.serviceId} is not valid`);
+      }
+
+      // eslint-disable-next-line no-await-in-loop
+      let vendorServiceItem = await VendorService.findOne({
+        vendorId: payload.vendorId,
+        serviceId: serviceItem.serviceId,
+        isDeleted: { $ne: true },
+      });
+
+      if (vendorServiceItem) {
+        vendorServiceItem.pricingType = serviceItem.pricingType;
+        vendorServiceItem.price = serviceItem.price;
+        vendorServiceItem.isAvailable = serviceItem.isAvailable !== undefined ? serviceItem.isAvailable : true;
+        vendorServiceItem.updatedBy = payload.updatedBy;
+        // eslint-disable-next-line no-await-in-loop
+        await vendorServiceItem.save();
+      } else {
+        // eslint-disable-next-line no-await-in-loop
+        vendorServiceItem = await VendorService.create({
+          vendorId: payload.vendorId,
+          serviceId: serviceItem.serviceId,
+          pricingType: serviceItem.pricingType,
+          price: serviceItem.price,
+          isAvailable: serviceItem.isAvailable !== undefined ? serviceItem.isAvailable : true,
+          createdBy: payload.createdBy,
+          updatedBy: payload.updatedBy,
+        });
+      }
+      results.push(vendorServiceItem);
+    }
+    return results;
+  }
+
+  if (payload.serviceId) {
+    const serviceIdObj = await Services.findOne({ _id: payload.serviceId });
+    if (!serviceIdObj) {
       throw new ApiError(httpStatus.BAD_REQUEST, 'field serviceId is not valid');
     }
+
+    const vendorServiceItem = await VendorService.findOne({
+      vendorId: payload.vendorId,
+      serviceId: payload.serviceId,
+      isDeleted: { $ne: true },
+    });
+
+    if (vendorServiceItem) {
+      vendorServiceItem.pricingType = payload.pricingType;
+      vendorServiceItem.price = payload.price;
+      vendorServiceItem.isAvailable = payload.isAvailable !== undefined ? payload.isAvailable : true;
+      vendorServiceItem.updatedBy = payload.updatedBy;
+      await vendorServiceItem.save();
+      return vendorServiceItem;
+    }
   }
-  const vendorService = await VendorService.create(body);
+  const vendorService = await VendorService.create(payload);
   return vendorService;
 }
 
@@ -82,7 +149,7 @@ export async function aggregateVendorService(query) {
 
 export async function aggregateVendorServiceWithPagination(query, options = {}) {
   const aggregate = VendorService.aggregate();
-  query.map((obj) => {
+  query.forEach((obj) => {
     aggregate._pipeline.push(obj);
   });
   const vendorService = await VendorService.aggregatePaginate(aggregate, options);

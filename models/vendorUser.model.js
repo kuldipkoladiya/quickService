@@ -59,7 +59,7 @@ const VendorUserSchema = new mongoose.Schema(
         minDistance: { type: Number },
         maxDistance: { type: Number },
         charge: { type: Number },
-      }
+      },
     ],
     isKycVerified: {
       type: Boolean,

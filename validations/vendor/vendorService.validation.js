@@ -13,8 +13,17 @@ export const createVendorService = {
     serviceId: Joi.objectId(),
     pricingType: Joi.string().valid(...Object.values(enumFields.EnumPricingType)),
     price: Joi.number().integer(),
-    estimatedTime: Joi.number().integer(),
     isAvailable: Joi.bool(),
+    services: Joi.array().items(
+      Joi.object().keys({
+        serviceId: Joi.objectId().required(),
+        pricingType: Joi.string()
+          .valid(...Object.values(enumFields.EnumPricingType))
+          .required(),
+        price: Joi.number().integer().required(),
+        isAvailable: Joi.bool(),
+      })
+    ),
   }),
 };
 
@@ -24,7 +33,6 @@ export const updateVendorService = {
     serviceId: Joi.objectId(),
     pricingType: Joi.string().valid(...Object.values(enumFields.EnumPricingType)),
     price: Joi.number().integer(),
-    estimatedTime: Joi.number().integer(),
     isAvailable: Joi.bool(),
   }),
   params: Joi.object().keys({
