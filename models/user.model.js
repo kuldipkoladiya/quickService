@@ -133,6 +133,9 @@ const UserSchema = new mongoose.Schema({
   mobileNumber: {
     type: Number,
   },
+  countryCode: {
+    type: String,
+  },
   isDeleted: {
     type: Boolean,
   },

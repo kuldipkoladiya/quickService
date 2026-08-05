@@ -116,7 +116,7 @@ export const register = catchAsync(async (req, res) => {
   if (user.mobileNumber) {
     // Send OTP to mobile via MSG91 API
     try {
-      await sendOtpToMobile(`${user.countryCode}${user.mobileNumber}`, otp); // Call your function to send OTP via MSG91
+      await sendOtpToMobile(`${user.countryCode || (userCountryCode && userCountryCode.code)}${user.mobileNumber}`, otp); // Call your function to send OTP via MSG91
       console.log('OTP sent to mobile via MSG91');
     } catch (error) {
       console.error('Error sending OTP to mobile:', error);
