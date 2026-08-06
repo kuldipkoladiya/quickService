@@ -6,6 +6,8 @@ import Joi from 'joi';
 import enumFields from 'models/enum.model';
 import config from '../../config/config';
 
+Joi.objectId = require('joi-objectid')(Joi);
+
 export const registerCustomer = {
   body: Joi.object()
     .keys({
@@ -34,7 +36,11 @@ export const register = {
 };
 export const login = {
   body: Joi.object().keys({
-    email: Joi.string().email(),
+    email: Joi.string().email().optional(),
+    mobileNumber: Joi.string()
+      .pattern(/^[0-9]{10,15}$/)
+      .optional(),
+    countryCodeId: Joi.objectId().optional(),
     password: Joi.string().required(),
     deviceToken: Joi.string().allow(''),
     role: Joi.string()
