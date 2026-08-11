@@ -1,5 +1,5 @@
 import httpStatus from 'http-status';
-import { vendorServiceService, servicesService } from 'services';
+import { vendorServiceService, servicesService, vendorUserService } from 'services';
 import { catchAsync } from 'utils/catchAsync';
 
 export const getVendorService = catchAsync(async (req, res) => {
@@ -13,15 +13,51 @@ export const getVendorService = catchAsync(async (req, res) => {
 });
 
 export const listVendorService = catchAsync(async (req, res) => {
+  const { vendorId, userId } = req.query;
   const filter = {};
+
+  if (vendorId) {
+    filter.vendorId = vendorId;
+  } else if (userId) {
+    const vendorUser = await vendorUserService.getOne({ userId });
+    if (vendorUser) {
+      filter.vendorId = vendorUser._id;
+    } else {
+      return res.status(httpStatus.OK).send({ results: [] });
+    }
+  }
+
   const options = {};
   const vendorService = await vendorServiceService.getVendorServiceList(filter, options);
   return res.status(httpStatus.OK).send({ results: vendorService });
 });
 
 export const paginateVendorService = catchAsync(async (req, res) => {
+  const { vendorId, userId, page, limit } = req.query;
   const filter = {};
-  const options = {};
+
+  if (vendorId) {
+    filter.vendorId = vendorId;
+  } else if (userId) {
+    const vendorUser = await vendorUserService.getOne({ userId });
+    if (vendorUser) {
+      filter.vendorId = vendorUser._id;
+    } else {
+      return res.status(httpStatus.OK).send({
+        results: {
+          docs: [],
+          totalDocs: 0,
+          limit: parseInt(limit, 10) || 10,
+          page: parseInt(page, 10) || 1,
+          totalPages: 0,
+        },
+      });
+    }
+  }
+
+  const pageNum = parseInt(page, 10) || 1;
+  const limitNum = parseInt(limit, 10) || 10;
+  const options = { page: pageNum, limit: limitNum };
   const vendorService = await vendorServiceService.getVendorServiceListWithPagination(filter, options);
   return res.status(httpStatus.OK).send({ results: vendorService });
 });
