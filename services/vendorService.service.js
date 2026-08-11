@@ -111,6 +111,7 @@ export async function createVendorService(body, options = {}) {
         vendorServiceItem = await VendorService.create({
           vendorId: payload.vendorId,
           serviceId: serviceItem.serviceId,
+          categoryId: serviceIdObj.categoryId,
           pricingType: serviceItem.pricingType,
           price: serviceItem.price,
           isAvailable: serviceItem.isAvailable !== undefined ? serviceItem.isAvailable : true,
@@ -128,6 +129,7 @@ export async function createVendorService(body, options = {}) {
     if (!serviceIdObj) {
       throw new ApiError(httpStatus.BAD_REQUEST, 'field serviceId is not valid');
     }
+    payload.categoryId = serviceIdObj.categoryId;
 
     const vendorServiceItem = await VendorService.findOne({
       vendorId: payload.vendorId,
@@ -140,6 +142,7 @@ export async function createVendorService(body, options = {}) {
       vendorServiceItem.price = payload.price;
       vendorServiceItem.isAvailable = payload.isAvailable !== undefined ? payload.isAvailable : true;
       vendorServiceItem.updatedBy = payload.updatedBy;
+      vendorServiceItem.categoryId = serviceIdObj.categoryId;
       await vendorServiceItem.save();
       return vendorServiceItem;
     }
@@ -160,6 +163,7 @@ export async function updateVendorService(filter, body, options = {}) {
     if (!serviceId) {
       throw new ApiError(httpStatus.BAD_REQUEST, 'field serviceId is not valid');
     }
+    body.categoryId = serviceId.categoryId;
   }
   const vendorService = await VendorService.findOneAndUpdate(filter, body, options);
   return vendorService;

@@ -33,6 +33,10 @@ const VendorServiceSchema = new mongoose.Schema(
       type: mongoose.Schema.Types.ObjectId,
       ref: 'Services',
     },
+    categoryId: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: 'Categories',
+    },
     pricingType: {
       type: String,
       enum: Object.values(enumModel.EnumPricingType),

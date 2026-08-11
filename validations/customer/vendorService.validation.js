@@ -10,6 +10,7 @@ export const createVendorService = {
   body: Joi.object().keys({
     vendorId: Joi.objectId(),
     serviceId: Joi.objectId(),
+    categoryId: Joi.objectId().optional(),
     price: Joi.number().integer(),
     isAvailable: Joi.bool(),
   }),
@@ -19,6 +20,7 @@ export const updateVendorService = {
   body: Joi.object().keys({
     vendorId: Joi.objectId(),
     serviceId: Joi.objectId(),
+    categoryId: Joi.objectId().optional(),
     price: Joi.number().integer(),
     isAvailable: Joi.bool(),
   }),

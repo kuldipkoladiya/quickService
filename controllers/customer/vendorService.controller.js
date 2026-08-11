@@ -106,9 +106,7 @@ export const getVendorServicesByCategory = catchAsync(async (req, res) => {
     return res.status(httpStatus.OK).send({ results });
   }
 
-  const servicesInCat = await servicesService.getServicesList({ categoryId });
-  const serviceIds = servicesInCat.map((s) => s._id);
-  const filter = { serviceId: { $in: serviceIds } };
+  const filter = { categoryId };
   const results = await vendorServiceService.getVendorServiceListWithPagination(filter, { page: pageNum, limit: limitNum });
   return res.status(httpStatus.OK).send({ results });
 });
