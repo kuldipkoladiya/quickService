@@ -7,22 +7,49 @@ import httpStatus from 'http-status';
 import { VendorService, VendorUser, Services, User } from 'models';
 
 export async function getVendorServiceById(id, options = {}) {
-  const vendorService = await VendorService.findById(id, options.projection, options);
+  const vendorService = await VendorService.findById(id, options.projection, options)
+    .populate({
+      path: 'vendorId',
+      populate: { path: 'userId' },
+    })
+    .populate('serviceId');
   return vendorService;
 }
 
 export async function getOne(query, options = {}) {
-  const vendorService = await VendorService.findOne(query, options.projection, options);
+  const vendorService = await VendorService.findOne(query, options.projection, options)
+    .populate({
+      path: 'vendorId',
+      populate: { path: 'userId' },
+    })
+    .populate('serviceId');
   return vendorService;
 }
 
 export async function getVendorServiceList(filter, options = {}) {
-  const vendorService = await VendorService.find(filter, options.projection, options);
+  const vendorService = await VendorService.find(filter, options.projection, options)
+    .populate({
+      path: 'vendorId',
+      populate: { path: 'userId' },
+    })
+    .populate('serviceId');
   return vendorService;
 }
 
 export async function getVendorServiceListWithPagination(filter, options = {}) {
-  const vendorService = await VendorService.paginate(filter, options);
+  const optionsWithPopulate = {
+    ...options,
+    populate: [
+      {
+        path: 'vendorId',
+        populate: { path: 'userId' },
+      },
+      {
+        path: 'serviceId',
+      },
+    ],
+  };
+  const vendorService = await VendorService.paginate(filter, optionsWithPopulate);
   return vendorService;
 }
 
