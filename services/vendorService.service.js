@@ -4,6 +4,7 @@
  */
 import ApiError from 'utils/ApiError';
 import httpStatus from 'http-status';
+import mongoose from 'mongoose';
 import { VendorService, VendorUser, Services, User } from 'models';
 
 export async function getVendorServiceById(id, options = {}) {
@@ -202,8 +203,8 @@ export async function getNearVendorServicesByCategory(longitude, latitude, categ
     isDeleted: { $ne: true },
   };
 
-  const mongoose = require('mongoose');
   const serviceMatch = {
+
     'vendorService.isDeleted': { $ne: true },
     'vendorService.isAvailable': true,
     'serviceDetails.categoryId': new mongoose.Types.ObjectId(categoryId),
