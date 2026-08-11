@@ -1,5 +1,6 @@
 import httpStatus from 'http-status';
-import { vendorServiceService, servicesService, vendorUserService } from 'services';
+import mongoose from 'mongoose';
+import { vendorServiceService, vendorUserService } from 'services';
 import { catchAsync } from 'utils/catchAsync';
 
 export const getVendorService = catchAsync(async (req, res) => {
@@ -106,7 +107,7 @@ export const getVendorServicesByCategory = catchAsync(async (req, res) => {
     return res.status(httpStatus.OK).send({ results });
   }
 
-  const filter = { categoryId };
+  const filter = { categoryId: new mongoose.Types.ObjectId(categoryId) };
   const results = await vendorServiceService.getVendorServiceListWithPagination(filter, { page: pageNum, limit: limitNum });
   return res.status(httpStatus.OK).send({ results });
 });
