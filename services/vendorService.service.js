@@ -12,7 +12,10 @@ export async function getVendorServiceById(id, options = {}) {
       path: 'vendorId',
       populate: { path: 'userId' },
     })
-    .populate('serviceId');
+    .populate({
+      path: 'serviceId',
+      populate: { path: 'categoryId' },
+    });
   return vendorService;
 }
 
@@ -22,7 +25,10 @@ export async function getOne(query, options = {}) {
       path: 'vendorId',
       populate: { path: 'userId' },
     })
-    .populate('serviceId');
+    .populate({
+      path: 'serviceId',
+      populate: { path: 'categoryId' },
+    });
   return vendorService;
 }
 
@@ -32,7 +38,10 @@ export async function getVendorServiceList(filter, options = {}) {
       path: 'vendorId',
       populate: { path: 'userId' },
     })
-    .populate('serviceId');
+    .populate({
+      path: 'serviceId',
+      populate: { path: 'categoryId' },
+    });
   return vendorService;
 }
 
@@ -46,6 +55,7 @@ export async function getVendorServiceListWithPagination(filter, options = {}) {
       },
       {
         path: 'serviceId',
+        populate: { path: 'categoryId' },
       },
     ],
   };
