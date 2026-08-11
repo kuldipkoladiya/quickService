@@ -11,11 +11,11 @@ export async function getVendorServiceById(id, options = {}) {
   const vendorService = await VendorService.findById(id, options.projection, options)
     .populate({
       path: 'vendorId',
-      populate: { path: 'userId' },
+      populate: 'userId',
     })
     .populate({
       path: 'serviceId',
-      populate: { path: 'categoryId' },
+      populate: 'categoryId',
     });
   return vendorService;
 }
@@ -24,11 +24,11 @@ export async function getOne(query, options = {}) {
   const vendorService = await VendorService.findOne(query, options.projection, options)
     .populate({
       path: 'vendorId',
-      populate: { path: 'userId' },
+      populate: 'userId',
     })
     .populate({
       path: 'serviceId',
-      populate: { path: 'categoryId' },
+      populate: 'categoryId',
     });
   return vendorService;
 }
@@ -37,11 +37,11 @@ export async function getVendorServiceList(filter, options = {}) {
   const vendorService = await VendorService.find(filter, options.projection, options)
     .populate({
       path: 'vendorId',
-      populate: { path: 'userId' },
+      populate: 'userId',
     })
     .populate({
       path: 'serviceId',
-      populate: { path: 'categoryId' },
+      populate: 'categoryId',
     });
   return vendorService;
 }
@@ -52,11 +52,11 @@ export async function getVendorServiceListWithPagination(filter, options = {}) {
     populate: [
       {
         path: 'vendorId',
-        populate: { path: 'userId' },
+        populate: 'userId',
       },
       {
         path: 'serviceId',
-        populate: { path: 'categoryId' },
+        populate: 'categoryId',
       },
     ],
   };
