@@ -93,21 +93,29 @@ export const removeVendorService = catchAsync(async (req, res) => {
   return res.status(httpStatus.OK).send({ results: vendorService });
 });
 
-export const getVendorServicesByCategory = catchAsync(async (req, res) => {
-  const { categoryId } = req.params;
-  const { latitude, longitude, page, limit } = req.query;
-  const pageNum = parseInt(page, 10) || 1;
-  const limitNum = parseInt(limit, 10) || 10;
+export const getVendorServicesByCategory = catchAsync(async (req, res, next) => {
+  try {
+    const { categoryId } = req.params;
+    const { latitude, longitude, page, limit } = req.query;
+    const pageNum = parseInt(page, 10) || 1;
+    const limitNum = parseInt(limit, 10) || 10;
 
-  if (latitude && longitude) {
-    const results = await vendorServiceService.getNearVendorServicesByCategory(longitude, latitude, categoryId, {
+    if (latitude && longitude) {
+      const results = await vendorServiceService.getNearVendorServicesByCategory(longitude, latitude, categoryId, {
+        page: pageNum,
+        limit: limitNum,
+      });
+      return res.status(httpStatus.OK).send({ results });
+    }
+
+    const filter = { categoryId: new mongoose.Types.ObjectId(categoryId) };
+    const results = await vendorServiceService.getVendorServiceListWithPagination(filter, {
       page: pageNum,
       limit: limitNum,
     });
     return res.status(httpStatus.OK).send({ results });
+  } catch (err) {
+    console.error('STACK TRACE:', err.stack || err);
+    return next(err);
   }
-
-  const filter = { categoryId: new mongoose.Types.ObjectId(categoryId) };
-  const results = await vendorServiceService.getVendorServiceListWithPagination(filter, { page: pageNum, limit: limitNum });
-  return res.status(httpStatus.OK).send({ results });
 });
