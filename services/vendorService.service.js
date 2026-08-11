@@ -49,16 +49,7 @@ export async function getVendorServiceList(filter, options = {}) {
 export async function getVendorServiceListWithPagination(filter, options = {}) {
   const optionsWithPopulate = {
     ...options,
-    populate: [
-      {
-        path: 'vendorId',
-        populate: 'userId',
-      },
-      {
-        path: 'serviceId',
-        populate: 'categoryId',
-      },
-    ],
+    populate: ['vendorId', 'serviceId'],
   };
   const vendorService = await VendorService.paginate(filter, optionsWithPopulate);
   return vendorService;
