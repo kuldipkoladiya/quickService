@@ -47,12 +47,30 @@ export async function getVendorServiceList(filter, options = {}) {
 }
 
 export async function getVendorServiceListWithPagination(filter, options = {}) {
-  const optionsWithPopulate = {
-    ...options,
-    populate: ['vendorId', 'serviceId'],
+  const page = parseInt(options.page, 10) || 1;
+  const limit = parseInt(options.limit, 10) || 10;
+  const skip = (page - 1) * limit;
+
+  const totalDocs = await VendorService.countDocuments(filter);
+  const docs = await VendorService.find(filter)
+    .populate({
+      path: 'vendorId',
+      populate: 'userId',
+    })
+    .populate({
+      path: 'serviceId',
+      populate: 'categoryId',
+    })
+    .skip(skip)
+    .limit(limit);
+
+  return {
+    docs,
+    totalDocs,
+    limit,
+    page,
+    totalPages: Math.ceil(totalDocs / limit),
   };
-  const vendorService = await VendorService.paginate(filter, optionsWithPopulate);
-  return vendorService;
 }
 
 export async function createVendorService(body, options = {}) {
