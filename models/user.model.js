@@ -164,7 +164,18 @@ const UserSchema = new mongoose.Schema({
   profilePic: {
     type: String,
   },
+  location: {
+    type: {
+      type: String,
+      enum: ['Point'],
+      default: 'Point',
+    },
+    coordinates: {
+      type: [Number],
+    },
+  },
 });
+UserSchema.index({ location: '2dsphere' });
 UserSchema.plugin(toJSON);
 UserSchema.plugin(mongoosePaginateV2);
 /**

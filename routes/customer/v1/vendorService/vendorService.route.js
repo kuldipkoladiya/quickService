@@ -26,6 +26,16 @@ router
     vendorServiceController.paginateVendorService
   );
 router
+  .route('/category/:categoryId')
+  /**
+   * getVendorServicesByCategory
+   * */
+  .get(
+    auth('customer'),
+    validate(vendorServiceValidation.getVendorServicesByCategory),
+    vendorServiceController.getVendorServicesByCategory
+  );
+router
   .route('/:vendorServiceId')
   /**
    * getVendorServiceById

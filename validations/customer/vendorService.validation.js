@@ -58,3 +58,17 @@ export const paginatedVendorService = {
     })
     .unknown(true),
 };
+
+export const getVendorServicesByCategory = {
+  params: Joi.object().keys({
+    categoryId: Joi.objectId().required(),
+  }),
+  query: Joi.object()
+    .keys({
+      latitude: Joi.number().optional(),
+      longitude: Joi.number().optional(),
+      page: Joi.number().integer().optional(),
+      limit: Joi.number().integer().optional(),
+    })
+    .unknown(true),
+};

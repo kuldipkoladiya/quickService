@@ -40,6 +40,10 @@ export const createUser = {
     fullName: Joi.string(),
     profileImage: Joi.string(),
     currentLocation: Joi.string(),
+    location: Joi.object().keys({
+      type: Joi.string().valid('Point').required(),
+      coordinates: Joi.array().items(Joi.number()).length(2).required(),
+    }).optional(),
   }),
 };
 
@@ -58,6 +62,10 @@ export const updateUser = {
     fullName: Joi.string(),
     profileImage: Joi.string(),
     currentLocation: Joi.string(),
+    location: Joi.object().keys({
+      type: Joi.string().valid('Point').required(),
+      coordinates: Joi.array().items(Joi.number()).length(2).required(),
+    }).optional(),
   }),
   params: Joi.object().keys({
     userId: Joi.objectId().required(),

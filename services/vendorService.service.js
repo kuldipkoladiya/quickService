@@ -4,7 +4,7 @@
  */
 import ApiError from 'utils/ApiError';
 import httpStatus from 'http-status';
-import { VendorService, VendorUser, Services } from 'models';
+import { VendorService, VendorUser, Services, User } from 'models';
 
 export async function getVendorServiceById(id, options = {}) {
   const vendorService = await VendorService.findById(id, options.projection, options);
@@ -154,4 +154,121 @@ export async function aggregateVendorServiceWithPagination(query, options = {}) 
   });
   const vendorService = await VendorService.aggregatePaginate(aggregate, options);
   return vendorService;
+}
+
+export async function getNearVendorServicesByCategory(longitude, latitude, categoryId, options = {}) {
+  const { page = 1, limit = 10 } = options;
+  const skip = (page - 1) * limit;
+
+  const matchStage = {
+    role: 'vendor',
+    isDeleted: { $ne: true },
+  };
+
+  const mongoose = require('mongoose');
+  const serviceMatch = {
+    'vendorService.isDeleted': { $ne: true },
+    'vendorService.isAvailable': true,
+    'serviceDetails.categoryId': new mongoose.Types.ObjectId(categoryId),
+    'serviceDetails.isDeleted': { $ne: true },
+    'serviceDetails.isActive': true,
+  };
+
+  const pipeline = [
+    {
+      $geoNear: {
+        near: {
+          type: 'Point',
+          coordinates: [parseFloat(longitude), parseFloat(latitude)],
+        },
+        distanceField: 'distance',
+        spherical: true,
+        query: matchStage,
+      },
+    },
+    {
+      $lookup: {
+        from: 'VendorUser',
+        localField: '_id',
+        foreignField: 'userId',
+        as: 'vendorUser',
+      },
+    },
+    { $unwind: '$vendorUser' },
+    {
+      $lookup: {
+        from: 'VendorService',
+        localField: 'vendorUser._id',
+        foreignField: 'vendorId',
+        as: 'vendorService',
+      },
+    },
+    { $unwind: '$vendorService' },
+    {
+      $lookup: {
+        from: 'Services',
+        localField: 'vendorService.serviceId',
+        foreignField: '_id',
+        as: 'serviceDetails',
+      },
+    },
+    { $unwind: '$serviceDetails' },
+    { $match: serviceMatch },
+    {
+      $addFields: {
+        isWithin5km: {
+          $cond: { if: { $lte: ['$distance', 5000] }, then: 1, else: 0 },
+        },
+      },
+    },
+    {
+      $project: {
+        _id: '$vendorService._id',
+        vendorId: '$vendorService.vendorId',
+        serviceId: '$vendorService.serviceId',
+        pricingType: '$vendorService.pricingType',
+        price: '$vendorService.price',
+        isAvailable: '$vendorService.isAvailable',
+        distance: '$distance',
+        isWithin5km: '$isWithin5km',
+        vendorDetails: {
+          _id: '$vendorUser._id',
+          businessName: '$vendorUser.businessName',
+          rating: '$vendorUser.rating',
+          experience: '$vendorUser.experience',
+          profileCompleted: '$vendorUser.profileCompleted',
+        },
+        serviceDetails: {
+          _id: '$serviceDetails._id',
+          title: '$serviceDetails.title',
+          description: '$serviceDetails.description',
+          categoryId: '$serviceDetails.categoryId',
+        },
+      },
+    },
+    {
+      $sort: {
+        isWithin5km: -1,
+        distance: 1,
+      },
+    },
+    {
+      $facet: {
+        metadata: [{ $count: 'total' }],
+        data: [{ $skip: skip }, { $limit: limit }],
+      },
+    },
+  ];
+
+  const results = await User.aggregate(pipeline);
+  const total = results[0]?.metadata[0]?.total || 0;
+  const data = results[0]?.data || [];
+
+  return {
+    docs: data,
+    totalDocs: total,
+    limit,
+    page,
+    totalPages: Math.ceil(total / limit),
+  };
 }

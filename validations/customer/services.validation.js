@@ -47,6 +47,8 @@ export const getServices = {
     .keys({
       page: Joi.number(),
       limit: Joi.number(),
+      latitude: Joi.number().optional(),
+      longitude: Joi.number().optional(),
     })
     .unknown(true),
 };
@@ -57,6 +59,20 @@ export const paginatedServices = {
     .keys({
       page: Joi.number().default(1),
       limit: Joi.number().default(10).max(100),
+      latitude: Joi.number().optional(),
+      longitude: Joi.number().optional(),
+    })
+    .unknown(true),
+};
+
+export const getServicesByCategory = {
+  params: Joi.object().keys({
+    categoryId: Joi.objectId().required(),
+  }),
+  query: Joi.object()
+    .keys({
+      latitude: Joi.number().optional(),
+      longitude: Joi.number().optional(),
     })
     .unknown(true),
 };

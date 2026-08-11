@@ -18,15 +18,34 @@ export const getServices = catchAsync(async (req, res) => {
 });
 
 export const listServices = catchAsync(async (req, res) => {
+  const { latitude, longitude, categoryId } = req.query;
+  if (latitude && longitude) {
+    const filter = {};
+    if (categoryId) filter.categoryId = categoryId;
+    const services = await servicesService.getNearServices(longitude, latitude, filter, { page: 1, limit: 1000 });
+    return res.status(httpStatus.OK).send({ results: services.docs });
+  }
   const filter = {};
+  if (categoryId) filter.categoryId = categoryId;
   const options = {};
   const services = await servicesService.getServicesList(filter, options);
   return res.status(httpStatus.OK).send({ results: services });
 });
 
 export const paginateServices = catchAsync(async (req, res) => {
+  const { latitude, longitude, categoryId, page, limit } = req.query;
+  const pageNum = parseInt(page, 10) || 1;
+  const limitNum = parseInt(limit, 10) || 10;
+
+  if (latitude && longitude) {
+    const filter = {};
+    if (categoryId) filter.categoryId = categoryId;
+    const services = await servicesService.getNearServices(longitude, latitude, filter, { page: pageNum, limit: limitNum });
+    return res.status(httpStatus.OK).send({ results: services });
+  }
   const filter = {};
-  const options = {};
+  if (categoryId) filter.categoryId = categoryId;
+  const options = { page: pageNum, limit: limitNum };
   const services = await servicesService.getServicesListWithPagination(filter, options);
   return res.status(httpStatus.OK).send({ results: services });
 });
@@ -58,5 +77,18 @@ export const removeServices = catchAsync(async (req, res) => {
     _id: servicesId,
   };
   const services = await servicesService.removeServices(filter);
+  return res.status(httpStatus.OK).send({ results: services });
+});
+
+export const getServicesByCategory = catchAsync(async (req, res) => {
+  const { categoryId } = req.params;
+  const { latitude, longitude } = req.query;
+  const filter = { categoryId };
+  if (latitude && longitude) {
+    const services = await servicesService.getNearServices(longitude, latitude, filter, { page: 1, limit: 1000 });
+    return res.status(httpStatus.OK).send({ results: services.docs });
+  }
+  const options = {};
+  const services = await servicesService.getServicesList(filter, options);
   return res.status(httpStatus.OK).send({ results: services });
 });
