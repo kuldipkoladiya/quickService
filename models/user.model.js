@@ -198,6 +198,9 @@ UserSchema.pre('save', async function (next) {
   if (User.isModified('password')) {
     User.password = await bcrypt.hash(User.password, 8);
   }
+  if (User.location && (!User.location.coordinates || User.location.coordinates.length === 0)) {
+    User.location = undefined;
+  }
   next();
 });
 /**
