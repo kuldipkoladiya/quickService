@@ -108,8 +108,7 @@ export const getVendorServicesByCategory = catchAsync(async (req, res, next) => 
       return res.status(httpStatus.OK).send({ results });
     }
 
-    const filter = { categoryId: new mongoose.Types.ObjectId(categoryId) };
-    const results = await vendorServiceService.getVendorServiceListWithPagination(filter, {
+    const results = await vendorServiceService.getVendorServicesByCategoryWithoutLocation(categoryId, {
       page: pageNum,
       limit: limitNum,
     });

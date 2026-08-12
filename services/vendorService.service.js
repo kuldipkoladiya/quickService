@@ -264,6 +264,15 @@ export async function getNearVendorServicesByCategory(longitude, latitude, categ
       },
     },
     { $unwind: '$serviceDetails' },
+    {
+      $lookup: {
+        from: 'Categories',
+        localField: 'serviceDetails.categoryId',
+        foreignField: '_id',
+        as: 'categoryDetails',
+      },
+    },
+    { $unwind: { path: '$categoryDetails', preserveNullAndEmptyArrays: true } },
     { $match: serviceMatch },
     {
       $addFields: {
@@ -275,26 +284,16 @@ export async function getNearVendorServicesByCategory(longitude, latitude, categ
     {
       $project: {
         _id: '$vendorService._id',
-        vendorId: '$vendorService.vendorId',
-        serviceId: '$vendorService.serviceId',
         pricingType: '$vendorService.pricingType',
         price: '$vendorService.price',
-        isAvailable: '$vendorService.isAvailable',
+        profilePic: { $ifNull: ['$profilePic', '$profileImage'] },
+        businessName: '$businessName',
+        serviceDetails: {
+          title: '$serviceDetails.title',
+        },
         distance: '$distance',
         isWithin5km: '$isWithin5km',
-        vendorDetails: {
-          _id: '$vendorUser._id',
-          businessName: '$vendorUser.businessName',
-          rating: '$vendorUser.rating',
-          experience: '$vendorUser.experience',
-          profileCompleted: '$vendorUser.profileCompleted',
-        },
-        serviceDetails: {
-          _id: '$serviceDetails._id',
-          title: '$serviceDetails.title',
-          description: '$serviceDetails.description',
-          categoryId: '$serviceDetails.categoryId',
-        },
+        visitCharges: '$vendorUser.visitCharges',
       },
     },
     {
@@ -315,8 +314,175 @@ export async function getNearVendorServicesByCategory(longitude, latitude, categ
   const total = results[0]?.metadata[0]?.total || 0;
   const data = results[0]?.data || [];
 
+  const docsWithCharge = data.map((doc) => {
+    let visitCharge = null;
+    if (doc.pricingType === 'visiting') {
+      if (doc.distance !== undefined && doc.distance !== null && doc.visitCharges && Array.isArray(doc.visitCharges)) {
+        const distanceKm = doc.distance / 1000;
+        const matchedCharge = doc.visitCharges.find(
+          (vc) => distanceKm >= vc.minDistance && distanceKm <= vc.maxDistance
+        );
+        if (matchedCharge) {
+          visitCharge = matchedCharge.charge;
+        }
+      }
+    }
+
+    const finalDoc = {
+      _id: doc._id,
+      pricingType: doc.pricingType,
+      profilePic: doc.profilePic,
+      businessName: doc.businessName,
+      serviceDetails: doc.serviceDetails,
+    };
+
+    if (doc.pricingType === 'fixed') {
+      finalDoc.price = doc.price;
+    } else if (doc.pricingType === 'visiting') {
+      finalDoc.visitCharge = visitCharge;
+    }
+
+    return finalDoc;
+  });
+
   return {
-    docs: data,
+    docs: docsWithCharge,
+    totalDocs: total,
+    limit,
+    page,
+    totalPages: Math.ceil(total / limit),
+  };
+}
+
+export async function getVendorServicesByCategoryWithoutLocation(categoryId, options = {}) {
+  const { page = 1, limit = 10 } = options;
+  const skip = (page - 1) * limit;
+
+  const matchStage = {
+    role: 'vendor',
+    isDeleted: { $ne: true },
+  };
+
+  const serviceMatch = {
+    'vendorService.isDeleted': { $ne: true },
+    'vendorService.isAvailable': true,
+    'serviceDetails.categoryId': new mongoose.Types.ObjectId(categoryId),
+    'serviceDetails.isDeleted': { $ne: true },
+    'serviceDetails.isActive': true,
+  };
+
+  const pipeline = [
+    {
+      $match: matchStage,
+    },
+    {
+      $lookup: {
+        from: 'VendorUser',
+        localField: '_id',
+        foreignField: 'userId',
+        as: 'vendorUser',
+      },
+    },
+    { $unwind: '$vendorUser' },
+    {
+      $lookup: {
+        from: 'VendorService',
+        localField: 'vendorUser._id',
+        foreignField: 'vendorId',
+        as: 'vendorService',
+      },
+    },
+    { $unwind: '$vendorService' },
+    {
+      $lookup: {
+        from: 'Services',
+        localField: 'vendorService.serviceId',
+        foreignField: '_id',
+        as: 'serviceDetails',
+      },
+    },
+    { $unwind: '$serviceDetails' },
+    {
+      $lookup: {
+        from: 'Categories',
+        localField: 'serviceDetails.categoryId',
+        foreignField: '_id',
+        as: 'categoryDetails',
+      },
+    },
+    { $unwind: { path: '$categoryDetails', preserveNullAndEmptyArrays: true } },
+    { $match: serviceMatch },
+    {
+      $addFields: {
+        distance: null,
+        isWithin5km: 0,
+      },
+    },
+    {
+      $project: {
+        _id: '$vendorService._id',
+        pricingType: '$vendorService.pricingType',
+        price: '$vendorService.price',
+        profilePic: { $ifNull: ['$profilePic', '$profileImage'] },
+        businessName: '$businessName',
+        serviceDetails: {
+          title: '$serviceDetails.title',
+        },
+        distance: '$distance',
+        isWithin5km: '$isWithin5km',
+        visitCharges: '$vendorUser.visitCharges',
+      },
+    },
+    {
+      $sort: {
+        _id: 1,
+      },
+    },
+    {
+      $facet: {
+        metadata: [{ $count: 'total' }],
+        data: [{ $skip: skip }, { $limit: limit }],
+      },
+    },
+  ];
+
+  const results = await User.aggregate(pipeline);
+  const total = results[0]?.metadata[0]?.total || 0;
+  const data = results[0]?.data || [];
+
+  const docsWithCharge = data.map((doc) => {
+    let visitCharge = null;
+    if (doc.pricingType === 'visiting') {
+      if (doc.distance !== undefined && doc.distance !== null && doc.visitCharges && Array.isArray(doc.visitCharges)) {
+        const distanceKm = doc.distance / 1000;
+        const matchedCharge = doc.visitCharges.find(
+          (vc) => distanceKm >= vc.minDistance && distanceKm <= vc.maxDistance
+        );
+        if (matchedCharge) {
+          visitCharge = matchedCharge.charge;
+        }
+      }
+    }
+
+    const finalDoc = {
+      _id: doc._id,
+      pricingType: doc.pricingType,
+      profilePic: doc.profilePic,
+      businessName: doc.businessName,
+      serviceDetails: doc.serviceDetails,
+    };
+
+    if (doc.pricingType === 'fixed') {
+      finalDoc.price = doc.price;
+    } else if (doc.pricingType === 'visiting') {
+      finalDoc.visitCharge = visitCharge;
+    }
+
+    return finalDoc;
+  });
+
+  return {
+    docs: docsWithCharge,
     totalDocs: total,
     limit,
     page,
