@@ -5,6 +5,7 @@
 import ApiError from 'utils/ApiError';
 import httpStatus from 'http-status';
 import { Bookings, User, VendorUser, Services, VendorService, Address } from 'models';
+import { EnumStatusOfBookings } from 'models/enum.model';
 
 export async function getBookingsById(id, options = {}) {
   const bookings = await Bookings.findById(id, options.projection, options);
@@ -26,7 +27,30 @@ export async function getBookingsListWithPagination(filter, options = {}) {
   return bookings;
 }
 
-export async function createBookings(body, options = {}) {
+function formatTime(date) {
+  let hours = date.getHours();
+  let minutes = date.getMinutes();
+  const ampm = hours >= 12 ? 'PM' : 'AM';
+  hours %= 12;
+  hours = hours || 12;
+  minutes = minutes < 10 ? `0${minutes}` : minutes;
+  return `${hours}:${minutes} ${ampm}`;
+}
+
+export async function createBookings(body = {}) {
+  if (!body.bookingDate) {
+    // eslint-disable-next-line no-param-reassign
+    body.bookingDate = new Date();
+  }
+  if (!body.bookingTime) {
+    // eslint-disable-next-line no-param-reassign
+    body.bookingTime = formatTime(new Date());
+  }
+  if (!body.status) {
+    // eslint-disable-next-line no-param-reassign
+    body.status = EnumStatusOfBookings.PANDING;
+  }
+
   if (body.customerId) {
     const customerId = await User.findOne({ _id: body.customerId });
     if (!customerId) {
@@ -57,6 +81,91 @@ export async function createBookings(body, options = {}) {
       throw new ApiError(httpStatus.BAD_REQUEST, 'field addressId is not valid');
     }
   }
+
+  // Verify multiple vendorServiceIds if passed
+  if (body.vendorServiceIds && Array.isArray(body.vendorServiceIds)) {
+    // eslint-disable-next-line no-restricted-syntax
+    for (const vsId of body.vendorServiceIds) {
+      // eslint-disable-next-line no-await-in-loop
+      const exists = await VendorService.findOne({ _id: vsId });
+      if (!exists) {
+        throw new ApiError(httpStatus.BAD_REQUEST, `vendorServiceId ${vsId} is not valid`);
+      }
+    }
+  }
+
+  // Verify multiple serviceIds if passed
+  if (body.serviceIds && Array.isArray(body.serviceIds)) {
+    // eslint-disable-next-line no-restricted-syntax
+    for (const sId of body.serviceIds) {
+      // eslint-disable-next-line no-await-in-loop
+      const exists = await Services.findOne({ _id: sId });
+      if (!exists) {
+        throw new ApiError(httpStatus.BAD_REQUEST, `serviceId ${sId} is not valid`);
+      }
+    }
+  }
+
+  // Auto-calculate pricing fields
+  const selectedVendorServiceIds = [];
+  if (body.vendorServiceId) selectedVendorServiceIds.push(body.vendorServiceId);
+  if (body.vendorServiceIds && Array.isArray(body.vendorServiceIds)) {
+    selectedVendorServiceIds.push(...body.vendorServiceIds);
+  }
+
+  const vendorServices = await VendorService.find({ _id: { $in: selectedVendorServiceIds } });
+
+  const totalPeople = (body.menCount || 0) + (body.womenCount || 0) + (body.childBoyCount || 0) + (body.childGirlCount || 0);
+  const multiplier = totalPeople > 0 ? totalPeople : 1;
+
+  let subtotal = 0;
+  // eslint-disable-next-line no-restricted-syntax
+  for (const vs of vendorServices) {
+    if (vs.pricingType === 'fixed') {
+      subtotal += (vs.price || 0) * multiplier;
+    }
+  }
+
+  // Calculate visit charge if coordinates are passed for visiting charge calculation
+  let visitCharge = 0;
+  if (body.latitude && body.longitude && body.vendorId) {
+    const vendorUser = await VendorUser.findById(body.vendorId).populate('userId');
+    if (vendorUser && vendorUser.userId && vendorUser.userId.location && vendorUser.userId.location.coordinates) {
+      const lat1 = body.latitude;
+      const lon1 = body.longitude;
+      const [lon2, lat2] = vendorUser.userId.location.coordinates;
+
+      const R = 6371; // Earth's radius in km
+      const dLat = ((lat2 - lat1) * Math.PI) / 180;
+      const dLon = ((lon2 - lon1) * Math.PI) / 180;
+      const a =
+        Math.sin(dLat / 2) * Math.sin(dLat / 2) +
+        Math.cos((lat1 * Math.PI) / 180) * Math.cos((lat2 * Math.PI) / 180) * Math.sin(dLon / 2) * Math.sin(dLon / 2);
+      const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+      const distanceKm = R * c;
+
+      if (vendorUser.visitCharges && Array.isArray(vendorUser.visitCharges)) {
+        const matchedCharge = vendorUser.visitCharges.find(
+          (vc) => distanceKm >= vc.minDistance && distanceKm <= vc.maxDistance
+        );
+        if (matchedCharge) {
+          visitCharge = matchedCharge.charge || 0;
+        }
+      }
+    }
+  }
+
+  subtotal += visitCharge;
+
+  // eslint-disable-next-line no-param-reassign
+  body.subtotal = subtotal;
+  // eslint-disable-next-line no-param-reassign
+  body.serviceFee = Math.round(subtotal * 0.05 * 100) / 100; // 5% service fee
+  // eslint-disable-next-line no-param-reassign
+  body.tax = Math.round(subtotal * 0.05 * 100) / 100; // 5% taxes
+  // eslint-disable-next-line no-param-reassign
+  body.totalAmount = Math.round((body.subtotal + body.serviceFee + body.tax) * 100) / 100;
+
   const bookings = await Bookings.create(body);
   return bookings;
 }
@@ -116,11 +225,11 @@ export async function aggregateBookings(query) {
   return bookings;
 }
 
-export async function aggregateBookingsWithPagination(query, options = {}) {
-  const aggregate = Bookings.aggregate();
-  query.map((obj) => {
-    aggregate._pipeline.push(obj);
-  });
-  const bookings = await Bookings.aggregatePaginate(aggregate, options);
-  return bookings;
-}
+// export async function aggregateBookingsWithPagination(query, options = {}) {
+//   const aggregate = Bookings.aggregate();
+//   query.map((obj) => {
+//     aggregate._pipeline.push(obj);
+//   });
+//   const bookings = await Bookings.aggregatePaginate(aggregate, options);
+//   return bookings;
+// }

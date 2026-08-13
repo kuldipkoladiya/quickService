@@ -44,6 +44,34 @@ const BookingsSchema = new mongoose.Schema(
       type: mongoose.Schema.Types.ObjectId,
       ref: 'VendorService',
     },
+    vendorServiceIds: [
+      {
+        type: mongoose.Schema.Types.ObjectId,
+        ref: 'VendorService',
+      },
+    ],
+    serviceIds: [
+      {
+        type: mongoose.Schema.Types.ObjectId,
+        ref: 'Services',
+      },
+    ],
+    menCount: {
+      type: Number,
+      default: 0,
+    },
+    womenCount: {
+      type: Number,
+      default: 0,
+    },
+    childBoyCount: {
+      type: Number,
+      default: 0,
+    },
+    childGirlCount: {
+      type: Number,
+      default: 0,
+    },
     addressId: {
       type: mongoose.Schema.Types.ObjectId,
       ref: 'Address',
