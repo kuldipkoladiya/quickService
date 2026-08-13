@@ -5,7 +5,7 @@
 import ApiError from 'utils/ApiError';
 import httpStatus from 'http-status';
 import mongoose from 'mongoose';
-import { VendorUser, User, Bank, Categories, VendorService } from 'models';
+import { VendorUser, User, Bank, Categories, VendorService, BusinessAddress } from 'models';
 import { generateOtp } from 'utils/common';
 import { countryCodeService, emailService } from 'services';
 import { EnumCodeTypeOfCode } from 'models/enum.model';
@@ -410,8 +410,14 @@ export async function getVendorUserDetailsWithServices(vendorUserId) {
     .populate('serviceId')
     .populate('categoryId');
 
+  const businessAddress = await BusinessAddress.findOne({
+    userId: vendorUser.userId?._id || vendorUser.userId,
+    isDeleted: { $ne: true },
+  });
+
   return {
     vendorUser,
+    businessAddress,
     services,
   };
 }
