@@ -283,7 +283,7 @@ export async function getNearVendorUsersByCategory(longitude, latitude, category
           coordinates: [parseFloat(longitude), parseFloat(latitude)],
         },
         distanceField: 'distance',
-        maxDistance: 5000, // 5km limit
+        maxDistance: 15000, // 15km limit
         spherical: true,
         query: matchStage,
       },
@@ -384,7 +384,7 @@ export async function getNearVendorUsersByCategory(longitude, latitude, category
       categoryTitle: doc.categoryDetails?.title || null,
       profilePic: doc.userId?.profilePic || doc.userId?.profileImage || null,
       charge,
-      distance: doc.distance,
+      distance: doc.distance !== undefined && doc.distance !== null ? doc.distance / 1000 : null,
     };
   });
 
