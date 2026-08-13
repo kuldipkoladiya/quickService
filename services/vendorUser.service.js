@@ -4,29 +4,34 @@
  */
 import ApiError from 'utils/ApiError';
 import httpStatus from 'http-status';
-import { VendorUser, User, Bank } from 'models';
+import mongoose from 'mongoose';
+import { VendorUser, User, Bank, Categories } from 'models';
 import { generateOtp } from 'utils/common';
 import { countryCodeService, emailService } from 'services';
 import { EnumCodeTypeOfCode } from 'models/enum.model';
 import { sendOtpToMobile } from './mobileotp.service';
 
 export async function getVendorUserById(id, options = {}) {
-  const vendorUser = await VendorUser.findById(id, options.projection, options);
+  const vendorUser = await VendorUser.findById(id, options.projection, options).populate('categoryId');
   return vendorUser;
 }
 
 export async function getOne(query, options = {}) {
-  const vendorUser = await VendorUser.findOne(query, options.projection, options);
+  const vendorUser = await VendorUser.findOne(query, options.projection, options).populate('categoryId');
   return vendorUser;
 }
 
 export async function getVendorUserList(filter, options = {}) {
-  const vendorUser = await VendorUser.find(filter, options.projection, options);
+  const vendorUser = await VendorUser.find(filter, options.projection, options).populate('categoryId');
   return vendorUser;
 }
 
 export async function getVendorUserListWithPagination(filter, options = {}) {
-  const vendorUser = await VendorUser.paginate(filter, options);
+  const paginateOptions = {
+    ...options,
+    populate: options.populate ? [].concat(options.populate, 'categoryId') : 'categoryId',
+  };
+  const vendorUser = await VendorUser.paginate(filter, paginateOptions);
   return vendorUser;
 }
 
@@ -41,6 +46,12 @@ export async function createVendorUser(body = {}) {
     const bankDetailsId = await Bank.findOne({ _id: body.bankDetailsId });
     if (!bankDetailsId) {
       throw new ApiError(httpStatus.BAD_REQUEST, 'field bankDetailsId is not valid');
+    }
+  }
+  if (body.categoryId) {
+    const categoryId = await Categories.findOne({ _id: body.categoryId });
+    if (!categoryId) {
+      throw new ApiError(httpStatus.BAD_REQUEST, 'field categoryId is not valid');
     }
   }
   const vendorUser = await VendorUser.create(body);
@@ -58,6 +69,12 @@ export async function updateVendorUser(filter, body, options = {}) {
     const bankDetailsId = await Bank.findOne({ _id: body.bankDetailsId });
     if (!bankDetailsId) {
       throw new ApiError(httpStatus.BAD_REQUEST, 'field bankDetailsId is not valid');
+    }
+  }
+  if (body.categoryId) {
+    const categoryId = await Categories.findOne({ _id: body.categoryId });
+    if (!categoryId) {
+      throw new ApiError(httpStatus.BAD_REQUEST, 'field categoryId is not valid');
     }
   }
   const vendorUser = await VendorUser.findOneAndUpdate(filter, body, options);
@@ -94,12 +111,21 @@ export async function aggregateVendorUser(query) {
 // }
 
 export async function updateVendorProfile(user, body) {
-  const { name, email, mobileNumber, countryCodeId, profileImage, businessName, gstNumber } = body;
+  const { name, email, mobileNumber, countryCodeId, profileImage, businessName, gstNumber, categoryId } = body;
 
   // 1. Update VendorUser details
   const vendorUserUpdate = {};
   if (businessName !== undefined) vendorUserUpdate.businessName = businessName;
   if (gstNumber !== undefined) vendorUserUpdate.gstNumber = gstNumber;
+  if (categoryId !== undefined) {
+    if (categoryId) {
+      const categoryExists = await Categories.findOne({ _id: categoryId });
+      if (!categoryExists) {
+        throw new ApiError(httpStatus.BAD_REQUEST, 'field categoryId is not valid');
+      }
+    }
+    vendorUserUpdate.categoryId = categoryId || null;
+  }
 
   const updatedVendorUser = await VendorUser.findOneAndUpdate(
     { userId: user._id },
@@ -198,5 +224,135 @@ export async function updateVendorProfile(user, body) {
     vendorUser: updatedVendorUser,
     verifyRequired: false,
     message: 'Profile updated successfully',
+  };
+}
+
+export async function getNearVendorUsersByCategory(longitude, latitude, categoryId, options = {}) {
+  const { page = 1, limit = 10 } = options;
+  const skip = (page - 1) * limit;
+
+  const matchStage = {
+    role: 'vendor',
+    isDeleted: { $ne: true },
+  };
+
+  const pipeline = [
+    {
+      $geoNear: {
+        near: {
+          type: 'Point',
+          coordinates: [parseFloat(longitude), parseFloat(latitude)],
+        },
+        distanceField: 'distance',
+        maxDistance: 5000, // 5km limit
+        spherical: true,
+        query: matchStage,
+      },
+    },
+    {
+      $lookup: {
+        from: 'VendorUser',
+        localField: '_id',
+        foreignField: 'userId',
+        as: 'vendorUser',
+      },
+    },
+    { $unwind: '$vendorUser' },
+    {
+      $match: {
+        'vendorUser.categoryId': new mongoose.Types.ObjectId(categoryId),
+        'vendorUser.isDeleted': { $ne: true },
+      },
+    },
+    {
+      $lookup: {
+        from: 'Categories',
+        localField: 'vendorUser.categoryId',
+        foreignField: '_id',
+        as: 'categoryDetails',
+      },
+    },
+    { $unwind: { path: '$categoryDetails', preserveNullAndEmptyArrays: true } },
+    {
+      $project: {
+        _id: '$vendorUser._id',
+        userId: {
+          _id: '$_id',
+          name: '$name',
+          email: '$email',
+          mobileNumber: '$mobileNumber',
+          countryCode: '$countryCode',
+          fullName: '$fullName',
+          profileImage: '$profileImage',
+          profilePic: '$profilePic',
+          location: '$location',
+        },
+        businessName: { $ifNull: ['$vendorUser.businessName', '$businessName'] },
+        gstNumber: '$vendorUser.gstNumber',
+        description: '$vendorUser.description',
+        experience: '$vendorUser.experience',
+        rating: '$vendorUser.rating',
+        totalReviews: '$vendorUser.totalReviews',
+        serviceRadius: '$vendorUser.serviceRadius',
+        visitCharges: '$vendorUser.visitCharges',
+        isKycVerified: '$vendorUser.isKycVerified',
+        kycStatus: '$vendorUser.kycStatus',
+        profileCompleted: '$vendorUser.profileCompleted',
+        avgResponseTime: '$vendorUser.avgResponseTime',
+        completedBookings: '$vendorUser.completedBookings',
+        categoryId: '$vendorUser.categoryId',
+        categoryDetails: {
+          _id: '$categoryDetails._id',
+          title: '$categoryDetails.title',
+          icon: '$categoryDetails.icon',
+          image: '$categoryDetails.image',
+        },
+        distance: '$distance',
+      },
+    },
+    {
+      $sort: {
+        distance: 1,
+      },
+    },
+    {
+      $facet: {
+        metadata: [{ $count: 'total' }],
+        data: [{ $skip: skip }, { $limit: limit }],
+      },
+    },
+  ];
+
+  const results = await User.aggregate(pipeline);
+  const total = results[0]?.metadata[0]?.total || 0;
+  const data = results[0]?.data || [];
+
+  const docsWithCharge = data.map((doc) => {
+    let charge = null;
+    if (doc.distance !== undefined && doc.distance !== null && doc.visitCharges && Array.isArray(doc.visitCharges)) {
+      const distanceKm = doc.distance / 1000;
+      const matchedCharge = doc.visitCharges.find((vc) => distanceKm >= vc.minDistance && distanceKm <= vc.maxDistance);
+      if (matchedCharge) {
+        charge = matchedCharge.charge;
+      }
+    }
+
+    return {
+      _id: doc._id,
+      userId: doc.userId?._id || doc.userId,
+      categoryId: doc.categoryId,
+      businessName: doc.businessName,
+      categoryTitle: doc.categoryDetails?.title || null,
+      profilePic: doc.userId?.profilePic || doc.userId?.profileImage || null,
+      charge,
+    };
+  });
+
+  return {
+    docs: docsWithCharge,
+    totalDocs: total,
+    limit,
+    page,
+    totalPages: Math.ceil(total / limit),
   };
 }

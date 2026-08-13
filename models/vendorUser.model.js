@@ -30,6 +30,10 @@ const VendorUserSchema = new mongoose.Schema(
       ref: 'User',
       required: true,
     },
+    categoryId: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: 'Categories',
+    },
     businessName: {
       type: String,
     },

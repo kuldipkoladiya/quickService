@@ -30,6 +30,7 @@ export const createVendorUser = {
     profileCompleted: Joi.bool(),
     avgResponseTime: Joi.string(),
     completedBookings: Joi.number().integer(),
+    categoryId: Joi.objectId().optional(),
   }),
 };
 
@@ -56,6 +57,7 @@ export const updateVendorUser = {
     profileCompleted: Joi.bool(),
     avgResponseTime: Joi.string(),
     completedBookings: Joi.number().integer(),
+    categoryId: Joi.objectId().optional(),
   }),
   params: Joi.object().keys({
     vendorUserId: Joi.objectId().required(),
@@ -103,5 +105,6 @@ export const updateProfile = {
     profileImage: Joi.string().optional(),
     businessName: Joi.string().optional(),
     gstNumber: Joi.string().optional(),
+    categoryId: Joi.objectId().optional(),
   }),
 };

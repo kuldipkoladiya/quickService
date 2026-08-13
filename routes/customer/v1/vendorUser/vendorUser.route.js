@@ -22,6 +22,17 @@ router
    * */
   .get(auth('customer'), validate(vendorUserValidation.paginatedVendorUser), vendorUserController.paginateVendorUser);
 router
+  .route('/category/:categoryId')
+  /**
+   * getVendorUsersByCategory
+   * */
+  .get(
+    auth('customer'),
+    validate(vendorUserValidation.getVendorUsersByCategory),
+    vendorUserController.getVendorUsersByCategory
+  );
+
+router
   .route('/:vendorUserId')
   /**
    * getVendorUserById

@@ -23,6 +23,7 @@ export const createVendorUser = {
     profileCompleted: Joi.bool(),
     avgResponseTime: Joi.string(),
     completedBookings: Joi.number().integer(),
+    categoryId: Joi.objectId().optional(),
   }),
 };
 
@@ -42,6 +43,7 @@ export const updateVendorUser = {
     profileCompleted: Joi.bool(),
     avgResponseTime: Joi.string(),
     completedBookings: Joi.number().integer(),
+    categoryId: Joi.objectId().optional(),
   }),
   params: Joi.object().keys({
     vendorUserId: Joi.objectId().required(),
@@ -76,6 +78,20 @@ export const paginatedVendorUser = {
     .keys({
       page: Joi.number().default(1),
       limit: Joi.number().default(10).max(100),
+    })
+    .unknown(true),
+};
+
+export const getVendorUsersByCategory = {
+  params: Joi.object().keys({
+    categoryId: Joi.objectId().required(),
+  }),
+  query: Joi.object()
+    .keys({
+      latitude: Joi.number().required(),
+      longitude: Joi.number().required(),
+      page: Joi.number().integer().optional(),
+      limit: Joi.number().integer().optional(),
     })
     .unknown(true),
 };
