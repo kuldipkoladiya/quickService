@@ -5,7 +5,7 @@
 import ApiError from 'utils/ApiError';
 import httpStatus from 'http-status';
 import mongoose from 'mongoose';
-import { VendorUser, User, Bank, Categories } from 'models';
+import { VendorUser, User, Bank, Categories, VendorService } from 'models';
 import { generateOtp } from 'utils/common';
 import { countryCodeService, emailService } from 'services';
 import { EnumCodeTypeOfCode } from 'models/enum.model';
@@ -35,6 +35,35 @@ export async function getVendorUserListWithPagination(filter, options = {}) {
   return vendorUser;
 }
 
+export function calculateVisitCharges(serviceRadius) {
+  if (!serviceRadius || serviceRadius <= 0) return [];
+  const charges = [];
+  
+  const tiers = [
+    { min: 0, max: 5, charge: 100 },
+    { min: 5, max: 10, charge: 150 },
+    { min: 10, max: 15, charge: 200 },
+    { min: 15, max: 20, charge: 500 },
+    { min: 20, max: 25, charge: 700 },
+    { min: 25, max: Infinity, charge: 1000 },
+  ];
+
+  for (const tier of tiers) {
+    if (serviceRadius > tier.min) {
+      const maxDistance = Math.min(serviceRadius, tier.max);
+      charges.push({
+        minDistance: tier.min,
+        maxDistance: maxDistance === Infinity ? serviceRadius : maxDistance,
+        charge: tier.charge
+      });
+    }
+    if (serviceRadius <= tier.max) {
+      break;
+    }
+  }
+  return charges;
+}
+
 export async function createVendorUser(body = {}) {
   if (body.userId) {
     const userId = await User.findOne({ _id: body.userId });
@@ -53,6 +82,9 @@ export async function createVendorUser(body = {}) {
     if (!categoryId) {
       throw new ApiError(httpStatus.BAD_REQUEST, 'field categoryId is not valid');
     }
+  }
+  if (body.serviceRadius !== undefined) {
+    body.visitCharges = calculateVisitCharges(body.serviceRadius);
   }
   const vendorUser = await VendorUser.create(body);
   return vendorUser;
@@ -76,6 +108,9 @@ export async function updateVendorUser(filter, body, options = {}) {
     if (!categoryId) {
       throw new ApiError(httpStatus.BAD_REQUEST, 'field categoryId is not valid');
     }
+  }
+  if (body.serviceRadius !== undefined) {
+    body.visitCharges = calculateVisitCharges(body.serviceRadius);
   }
   const vendorUser = await VendorUser.findOneAndUpdate(filter, body, options);
   return vendorUser;
@@ -111,12 +146,16 @@ export async function aggregateVendorUser(query) {
 // }
 
 export async function updateVendorProfile(user, body) {
-  const { name, email, mobileNumber, countryCodeId, profileImage, businessName, gstNumber, categoryId } = body;
+  const { name, email, mobileNumber, countryCodeId, profileImage, businessName, gstNumber, categoryId, serviceRadius } = body;
 
   // 1. Update VendorUser details
   const vendorUserUpdate = {};
   if (businessName !== undefined) vendorUserUpdate.businessName = businessName;
   if (gstNumber !== undefined) vendorUserUpdate.gstNumber = gstNumber;
+  if (serviceRadius !== undefined) {
+    vendorUserUpdate.serviceRadius = serviceRadius;
+    vendorUserUpdate.visitCharges = calculateVisitCharges(serviceRadius);
+  }
   if (categoryId !== undefined) {
     if (categoryId) {
       const categoryExists = await Categories.findOne({ _id: categoryId });
@@ -356,3 +395,23 @@ export async function getNearVendorUsersByCategory(longitude, latitude, category
     totalPages: Math.ceil(total / limit),
   };
 }
+
+export async function getVendorUserDetailsWithServices(vendorUserId) {
+  const vendorUser = await VendorUser.findById(vendorUserId)
+    .populate('userId')
+    .populate('categoryId');
+
+  if (!vendorUser) {
+    throw new ApiError(httpStatus.NOT_FOUND, 'Vendor user not found');
+  }
+
+  const services = await VendorService.find({ vendorId: vendorUserId, isDeleted: { $ne: true } })
+    .populate('serviceId')
+    .populate('categoryId');
+
+  return {
+    vendorUser,
+    services,
+  };
+}
+

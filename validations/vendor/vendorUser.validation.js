@@ -106,5 +106,6 @@ export const updateProfile = {
     businessName: Joi.string().optional(),
     gstNumber: Joi.string().optional(),
     categoryId: Joi.objectId().optional(),
+    serviceRadius: Joi.number().integer().optional(),
   }),
 };

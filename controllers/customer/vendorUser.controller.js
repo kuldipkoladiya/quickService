@@ -4,12 +4,8 @@ import { catchAsync } from 'utils/catchAsync';
 
 export const getVendorUser = catchAsync(async (req, res) => {
   const { vendorUserId } = req.params;
-  const filter = {
-    _id: vendorUserId,
-  };
-  const options = {};
-  const vendorUser = await vendorUserService.getOne(filter, options);
-  return res.status(httpStatus.OK).send({ results: vendorUser });
+  const result = await vendorUserService.getVendorUserDetailsWithServices(vendorUserId);
+  return res.status(httpStatus.OK).send({ results: result });
 });
 
 export const listVendorUser = catchAsync(async (req, res) => {

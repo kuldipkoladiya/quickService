@@ -217,7 +217,6 @@ export async function getNearVendorServicesByCategory(longitude, latitude, categ
   };
 
   const serviceMatch = {
-
     'vendorService.isDeleted': { $ne: true },
     'vendorService.isAvailable': true,
     'serviceDetails.categoryId': new mongoose.Types.ObjectId(categoryId),
@@ -319,9 +318,7 @@ export async function getNearVendorServicesByCategory(longitude, latitude, categ
     if (doc.pricingType === 'visiting') {
       if (doc.distance !== undefined && doc.distance !== null && doc.visitCharges && Array.isArray(doc.visitCharges)) {
         const distanceKm = doc.distance / 1000;
-        const matchedCharge = doc.visitCharges.find(
-          (vc) => distanceKm >= vc.minDistance && distanceKm <= vc.maxDistance
-        );
+        const matchedCharge = doc.visitCharges.find((vc) => distanceKm >= vc.minDistance && distanceKm <= vc.maxDistance);
         if (matchedCharge) {
           visitCharge = matchedCharge.charge;
         }
@@ -455,9 +452,7 @@ export async function getVendorServicesByCategoryWithoutLocation(categoryId, opt
     if (doc.pricingType === 'visiting') {
       if (doc.distance !== undefined && doc.distance !== null && doc.visitCharges && Array.isArray(doc.visitCharges)) {
         const distanceKm = doc.distance / 1000;
-        const matchedCharge = doc.visitCharges.find(
-          (vc) => distanceKm >= vc.minDistance && distanceKm <= vc.maxDistance
-        );
+        const matchedCharge = doc.visitCharges.find((vc) => distanceKm >= vc.minDistance && distanceKm <= vc.maxDistance);
         if (matchedCharge) {
           visitCharge = matchedCharge.charge;
         }
