@@ -384,6 +384,7 @@ export async function getNearVendorUsersByCategory(longitude, latitude, category
       categoryTitle: doc.categoryDetails?.title || null,
       profilePic: doc.userId?.profilePic || doc.userId?.profileImage || null,
       charge,
+      distance: doc.distance,
     };
   });
 
