@@ -24,7 +24,7 @@ export async function getVendorAvailabilityListWithPagination(filter, options = 
   return vendorAvailability;
 }
 
-export async function createVendorAvailability(body, options = {}) {
+export async function createVendorAvailability(body = {}) {
   const vendorAvailability = await VendorAvailability.create(body);
   return vendorAvailability;
 }
@@ -56,9 +56,106 @@ export async function aggregateVendorAvailability(query) {
 
 export async function aggregateVendorAvailabilityWithPagination(query, options = {}) {
   const aggregate = VendorAvailability.aggregate();
-  query.map((obj) => {
+  query.forEach((obj) => {
     aggregate._pipeline.push(obj);
   });
   const vendorAvailability = await VendorAvailability.aggregatePaginate(aggregate, options);
   return vendorAvailability;
+}
+
+const SYSTEM_SLOTS = [
+  { label: '9 am - 12 pm', startTime: '09:00 AM', endTime: '12:00 PM', isAvailable: true },
+  { label: '12 pm - 3 pm', startTime: '12:00 PM', endTime: '03:00 PM', isAvailable: true },
+  { label: '3 pm - 6 pm', startTime: '03:00 PM', endTime: '06:00 PM', isAvailable: true },
+];
+
+export async function upsertVendorAvailability(vendorId, body = {}, userId = null) {
+  const filter = { vendorId };
+  const updateData = { ...body };
+  if (userId) {
+    updateData.updatedBy = userId;
+  }
+
+  // Auto-sync isOnline <-> storeStatus seamlessly
+  if (typeof updateData.isOnline === 'boolean') {
+    updateData.storeStatus = updateData.isOnline ? 'online' : 'offline';
+  } else if (updateData.storeStatus) {
+    updateData.isOnline = updateData.storeStatus.toLowerCase() === 'online';
+    updateData.storeStatus = updateData.isOnline ? 'online' : 'offline';
+  }
+
+  // Clean weekly schedule for Vendor UI: only stores day and isOpen (no clutter)
+  if (updateData.weeklySchedule && Array.isArray(updateData.weeklySchedule)) {
+    updateData.weeklySchedule = updateData.weeklySchedule.map((item) => {
+      const dayLower = item.day ? item.day.toLowerCase() : 'monday';
+      return {
+        day: dayLower,
+        isOpen: item.isOpen !== undefined ? Boolean(item.isOpen) : true,
+      };
+    });
+  }
+
+  let availability = await VendorAvailability.findOne(filter);
+  if (!availability) {
+    if (userId) updateData.createdBy = userId;
+    updateData.vendorId = vendorId;
+    availability = await VendorAvailability.create(updateData);
+  } else {
+    availability = await VendorAvailability.findOneAndUpdate(filter, { $set: updateData }, { new: true });
+  }
+  return availability;
+}
+
+export async function getVendorAvailableSlots(vendorId, totalDays = 7) {
+  const availability = await VendorAvailability.findOne({ vendorId, isDeleted: { $ne: true } });
+
+  if (!availability) {
+    return {
+      vendorId,
+      isOnline: true,
+      storeStatus: 'online',
+      bookingOption: 'instant',
+      instantArrivalEstimate: '30-40 mins',
+      availableDates: [],
+    };
+  }
+
+  const availableDates = [];
+  const today = new Date();
+  const dayNames = ['sunday', 'monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday'];
+  const displayDayNames = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
+  const monthNames = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+
+  for (let i = 0; i < totalDays; i += 1) {
+    const targetDate = new Date();
+    targetDate.setDate(today.getDate() + i);
+    const dayOfWeekIndex = targetDate.getDay(); // 0 = Sunday, 1 = Monday...
+    const currentDayName = dayNames[dayOfWeekIndex];
+
+    const weeklySchedule = availability.weeklySchedule || [];
+    const daySchedule = weeklySchedule.find((s) => s.day && s.day.toLowerCase() === currentDayName);
+
+    // If day schedule is open (default true if not found)
+    if (!daySchedule || daySchedule.isOpen) {
+      const displayDay = i === 0 ? 'Today' : displayDayNames[dayOfWeekIndex];
+      const displayDate = `${targetDate.getDate()} ${monthNames[targetDate.getMonth()]}`;
+
+      availableDates.push({
+        date: targetDate.toISOString().split('T')[0],
+        displayDay,
+        displayDate,
+        dayOfWeek: displayDayNames[dayOfWeekIndex],
+        timeSlots: SYSTEM_SLOTS,
+      });
+    }
+  }
+
+  return {
+    vendorId,
+    isOnline: availability.isOnline,
+    storeStatus: availability.storeStatus,
+    bookingOption: availability.bookingOption,
+    instantArrivalEstimate: availability.instantArrivalEstimate || '30-40 mins',
+    availableDates,
+  };
 }

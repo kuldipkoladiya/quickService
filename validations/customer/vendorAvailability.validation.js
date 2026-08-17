@@ -60,3 +60,18 @@ export const paginatedVendorAvailability = {
     })
     .unknown(true),
 };
+
+export const getVendorSlots = {
+  params: Joi.object().keys({
+    vendorId: Joi.objectId().required(),
+  }),
+  query: Joi.object().keys({
+    days: Joi.number().integer().min(1).max(30).default(7),
+  }),
+};
+
+export const getVendorAvailabilityByVendorId = {
+  params: Joi.object().keys({
+    vendorId: Joi.objectId().required(),
+  }),
+};

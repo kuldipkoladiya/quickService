@@ -5,7 +5,7 @@
 import ApiError from 'utils/ApiError';
 import httpStatus from 'http-status';
 import mongoose from 'mongoose';
-import { VendorUser, User, Bank, Categories, VendorService, BusinessAddress } from 'models';
+import { VendorUser, User, Bank, Categories, VendorService, BusinessAddress, VendorAvailability } from 'models';
 import { generateOtp } from 'utils/common';
 import { countryCodeService, emailService } from 'services';
 import { EnumCodeTypeOfCode } from 'models/enum.model';
@@ -38,7 +38,7 @@ export async function getVendorUserListWithPagination(filter, options = {}) {
 export function calculateVisitCharges(serviceRadius) {
   if (!serviceRadius || serviceRadius <= 0) return [];
   const charges = [];
-  
+
   const tiers = [
     { min: 0, max: 5, charge: 100 },
     { min: 5, max: 10, charge: 150 },
@@ -48,13 +48,14 @@ export function calculateVisitCharges(serviceRadius) {
     { min: 25, max: Infinity, charge: 1000 },
   ];
 
+  // eslint-disable-next-line no-restricted-syntax
   for (const tier of tiers) {
     if (serviceRadius > tier.min) {
       const maxDistance = Math.min(serviceRadius, tier.max);
       charges.push({
         minDistance: tier.min,
         maxDistance: maxDistance === Infinity ? serviceRadius : maxDistance,
-        charge: tier.charge
+        charge: tier.charge,
       });
     }
     if (serviceRadius <= tier.max) {
@@ -84,6 +85,7 @@ export async function createVendorUser(body = {}) {
     }
   }
   if (body.serviceRadius !== undefined) {
+    // eslint-disable-next-line no-param-reassign
     body.visitCharges = calculateVisitCharges(body.serviceRadius);
   }
   const vendorUser = await VendorUser.create(body);
@@ -110,6 +112,7 @@ export async function updateVendorUser(filter, body, options = {}) {
     }
   }
   if (body.serviceRadius !== undefined) {
+    // eslint-disable-next-line no-param-reassign
     body.visitCharges = calculateVisitCharges(body.serviceRadius);
   }
   const vendorUser = await VendorUser.findOneAndUpdate(filter, body, options);
@@ -146,7 +149,8 @@ export async function aggregateVendorUser(query) {
 // }
 
 export async function updateVendorProfile(user, body) {
-  const { name, email, mobileNumber, countryCodeId, profileImage, businessName, gstNumber, categoryId, serviceRadius } = body;
+  const { name, email, mobileNumber, countryCodeId, profileImage, businessName, gstNumber, categoryId, serviceRadius } =
+    body;
 
   // 1. Update VendorUser details
   const vendorUserUpdate = {};
@@ -313,6 +317,15 @@ export async function getNearVendorUsersByCategory(longitude, latitude, category
     },
     { $unwind: { path: '$categoryDetails', preserveNullAndEmptyArrays: true } },
     {
+      $lookup: {
+        from: 'VendorAvailability',
+        localField: 'vendorUser._id',
+        foreignField: 'vendorId',
+        as: 'vendorAvailability',
+      },
+    },
+    { $unwind: { path: '$vendorAvailability', preserveNullAndEmptyArrays: true } },
+    {
       $project: {
         _id: '$vendorUser._id',
         userId: {
@@ -346,6 +359,7 @@ export async function getNearVendorUsersByCategory(longitude, latitude, category
           icon: '$categoryDetails.icon',
           image: '$categoryDetails.image',
         },
+        vendorAvailability: '$vendorAvailability',
         distance: '$distance',
       },
     },
@@ -363,8 +377,11 @@ export async function getNearVendorUsersByCategory(longitude, latitude, category
   ];
 
   const results = await User.aggregate(pipeline);
-  const total = results[0]?.metadata[0]?.total || 0;
-  const data = results[0]?.data || [];
+  const total = (results[0] && results[0].metadata && results[0].metadata[0] && results[0].metadata[0].total) || 0;
+  const data = (results[0] && results[0].data) || [];
+
+  const dayNames = ['sunday', 'monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday'];
+  const todayDayName = dayNames[new Date().getDay()];
 
   const docsWithCharge = data.map((doc) => {
     let charge = null;
@@ -376,15 +393,63 @@ export async function getNearVendorUsersByCategory(longitude, latitude, category
       }
     }
 
+    const va = doc.vendorAvailability;
+    const isOnline = va && va.isOnline !== undefined ? Boolean(va.isOnline) : true;
+    const storeStatus = (va && va.storeStatus) || (isOnline ? 'online' : 'offline');
+    const bookingOption = (va && va.bookingOption) || 'instant';
+    const instantArrivalEstimate = (va && va.instantArrivalEstimate) || '30-40 mins';
+
+    // Check if open today in weekly schedule
+    let isOpenToday = true;
+    if (va && va.weeklySchedule && Array.isArray(va.weeklySchedule)) {
+      const todaySchedule = va.weeklySchedule.find((s) => s.day && s.day.toLowerCase() === todayDayName);
+      if (todaySchedule) {
+        isOpenToday = Boolean(todaySchedule.isOpen);
+      }
+    }
+
+    const isAvailable = isOnline && isOpenToday;
+
+    let statusText = 'Available';
+    let statusBadge = 'available';
+
+    if (!isOnline) {
+      statusText = 'Currently Unavailable';
+      statusBadge = 'offline';
+    } else if (!isOpenToday) {
+      statusText = 'Closed Today';
+      statusBadge = 'closed';
+    } else if (bookingOption === 'instant') {
+      statusText = `Arriving in ${instantArrivalEstimate}`;
+      statusBadge = 'instant';
+    } else {
+      statusText = 'Open for Schedule';
+      statusBadge = 'schedule';
+    }
+
+    const userIdVal = (doc.userId && doc.userId._id) || doc.userId;
+    const profilePicVal = (doc.userId && (doc.userId.profilePic || doc.userId.profileImage)) || null;
+    const categoryTitleVal = (doc.categoryDetails && doc.categoryDetails.title) || null;
+
     return {
       _id: doc._id,
-      userId: doc.userId?._id || doc.userId,
+      userId: userIdVal,
       categoryId: doc.categoryId,
       businessName: doc.businessName,
-      categoryTitle: doc.categoryDetails?.title || null,
-      profilePic: doc.userId?.profilePic || doc.userId?.profileImage || null,
+      categoryTitle: categoryTitleVal,
+      profilePic: profilePicVal,
       charge,
       distance: doc.distance !== undefined && doc.distance !== null ? Math.round((doc.distance / 1000) * 100) / 100 : null,
+      vendorAvailability: {
+        isOnline,
+        storeStatus,
+        isOpenToday,
+        isAvailable,
+        statusText,
+        statusBadge,
+        bookingOption,
+        instantArrivalEstimate,
+      },
     };
   });
 
@@ -398,9 +463,7 @@ export async function getNearVendorUsersByCategory(longitude, latitude, category
 }
 
 export async function getVendorUserDetailsWithServices(vendorUserId) {
-  const vendorUser = await VendorUser.findById(vendorUserId)
-    .populate('userId')
-    .populate('categoryId');
+  const vendorUser = await VendorUser.findById(vendorUserId).populate('userId').populate('categoryId');
 
   if (!vendorUser) {
     throw new ApiError(httpStatus.NOT_FOUND, 'Vendor user not found');
@@ -410,15 +473,65 @@ export async function getVendorUserDetailsWithServices(vendorUserId) {
     .populate('serviceId')
     .populate('categoryId');
 
+  const businessAddressUserId = (vendorUser.userId && vendorUser.userId._id) || vendorUser.userId;
   const businessAddress = await BusinessAddress.findOne({
-    userId: vendorUser.userId?._id || vendorUser.userId,
+    userId: businessAddressUserId,
     isDeleted: { $ne: true },
   });
+
+  const va = await VendorAvailability.findOne({ vendorId: vendorUserId, isDeleted: { $ne: true } });
+
+  const dayNames = ['sunday', 'monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday'];
+  const todayDayName = dayNames[new Date().getDay()];
+
+  const isOnline = va && va.isOnline !== undefined ? Boolean(va.isOnline) : true;
+  const storeStatus = (va && va.storeStatus) || (isOnline ? 'online' : 'offline');
+  const bookingOption = (va && va.bookingOption) || 'instant';
+  const instantArrivalEstimate = (va && va.instantArrivalEstimate) || '30-40 mins';
+
+  let isOpenToday = true;
+  if (va && va.weeklySchedule && Array.isArray(va.weeklySchedule)) {
+    const todaySchedule = va.weeklySchedule.find((s) => s.day && s.day.toLowerCase() === todayDayName);
+    if (todaySchedule) {
+      isOpenToday = Boolean(todaySchedule.isOpen);
+    }
+  }
+
+  const isAvailable = isOnline && isOpenToday;
+
+  let statusText = 'Available';
+  let statusBadge = 'available';
+
+  if (!isOnline) {
+    statusText = 'Currently Unavailable';
+    statusBadge = 'offline';
+  } else if (!isOpenToday) {
+    statusText = 'Closed Today';
+    statusBadge = 'closed';
+  } else if (bookingOption === 'instant') {
+    statusText = `Arriving in ${instantArrivalEstimate}`;
+    statusBadge = 'instant';
+  } else {
+    statusText = 'Open for Schedule';
+    statusBadge = 'schedule';
+  }
+
+  const availabilityInfo = {
+    isOnline,
+    storeStatus,
+    isOpenToday,
+    isAvailable,
+    statusText,
+    statusBadge,
+    bookingOption,
+    instantArrivalEstimate,
+    weeklySchedule: (va && va.weeklySchedule) || [],
+  };
 
   return {
     vendorUser,
     businessAddress,
     services,
+    vendorAvailability: availabilityInfo,
   };
 }
-

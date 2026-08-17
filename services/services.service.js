@@ -24,7 +24,7 @@ export async function getServicesListWithPagination(filter, options = {}) {
   return services;
 }
 
-export async function createServices(body, options = {}) {
+export async function createServices(body = {}) {
   const services = await Services.create(body);
   return services;
 }
@@ -59,14 +59,14 @@ export async function aggregateServices(query) {
   return services;
 }
 
-export async function aggregateServicesWithPagination(query, options = {}) {
-  const aggregate = Services.aggregate();
-  query.map((obj) => {
-    aggregate._pipeline.push(obj);
-  });
-  const services = await Services.aggregatePaginate(aggregate, options);
-  return services;
-}
+// export async function aggregateServicesWithPagination(query, options = {}) {
+//   const aggregate = Services.aggregate();
+//   query.map((obj) => {
+//     aggregate._pipeline.push(obj);
+//   });
+//   const services = await Services.aggregatePaginate(aggregate, options);
+//   return services;
+// }
 
 export async function getNearServices(longitude, latitude, filter = {}, options = {}) {
   const { page = 1, limit = 10 } = options;
@@ -150,8 +150,8 @@ export async function getNearServices(longitude, latitude, filter = {}, options 
   ];
 
   const results = await User.aggregate(pipeline);
-  const total = results[0]?.metadata[0]?.total || 0;
-  const data = results[0]?.data || [];
+  const total = (results[0] && results[0].metadata && results[0].metadata[0] && results[0].metadata[0].total) || 0;
+  const data = (results[0] && results[0].data) || [];
 
   return {
     docs: data,

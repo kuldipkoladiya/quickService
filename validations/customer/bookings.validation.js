@@ -21,8 +21,13 @@ export const createBookings = {
     childBoyCount: Joi.number().integer().optional(),
     childGirlCount: Joi.number().integer().optional(),
     addressId: Joi.objectId(),
-    bookingDate: Joi.date(),
-    bookingTime: Joi.string(),
+    bookingType: Joi.string()
+      .valid(...Object.values(enumFields.EnumBookingOption))
+      .optional(),
+    bookingDate: Joi.date().optional(),
+    bookingTime: Joi.string().optional(),
+    timeSlot: Joi.string().optional(),
+    estimatedArrival: Joi.string().optional(),
     serviceStartTime: Joi.date(),
     serviceEndTime: Joi.date(),
     status: Joi.string().valid(...Object.values(enumFields.EnumStatusOfBookings)),
@@ -48,8 +53,13 @@ export const updateBookings = {
     serviceId: Joi.objectId(),
     vendorServiceId: Joi.objectId(),
     addressId: Joi.objectId(),
+    bookingType: Joi.string()
+      .valid(...Object.values(enumFields.EnumBookingOption))
+      .optional(),
     bookingDate: Joi.date(),
     bookingTime: Joi.string(),
+    timeSlot: Joi.string().optional(),
+    estimatedArrival: Joi.string().optional(),
     serviceStartTime: Joi.date(),
     serviceEndTime: Joi.date(),
     status: Joi.string().valid(...Object.values(enumFields.EnumStatusOfBookings)),

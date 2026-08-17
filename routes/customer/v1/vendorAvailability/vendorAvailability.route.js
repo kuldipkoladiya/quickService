@@ -24,6 +24,24 @@ router
     vendorAvailabilityController.listVendorAvailability
   );
 router
+  .route('/slots/:vendorId')
+  /**
+   * getVendorSlots
+   * */
+  .get(auth('customer'), validate(vendorAvailabilityValidation.getVendorSlots), vendorAvailabilityController.getVendorSlots);
+
+router
+  .route('/vendor/:vendorId')
+  /**
+   * getVendorAvailabilityByVendorId
+   * */
+  .get(
+    auth('customer'),
+    validate(vendorAvailabilityValidation.getVendorAvailabilityByVendorId),
+    vendorAvailabilityController.getVendorAvailabilityByVendorId
+  );
+
+router
   .route('/paginated')
   /**
    * getVendorAvailabilityPaginated

@@ -4,7 +4,7 @@
  */
 import ApiError from 'utils/ApiError';
 import httpStatus from 'http-status';
-import { Bookings, User, VendorUser, Services, VendorService, Address } from 'models';
+import { Bookings, User, VendorUser, Services, VendorService, Address, VendorAvailability } from 'models';
 import { EnumStatusOfBookings } from 'models/enum.model';
 
 export async function getBookingsById(id, options = {}) {
@@ -38,14 +38,33 @@ function formatTime(date) {
 }
 
 export async function createBookings(body = {}) {
-  if (!body.bookingDate) {
-    // eslint-disable-next-line no-param-reassign
-    body.bookingDate = new Date();
+  let vendorAvailability = null;
+  if (body.vendorId) {
+    vendorAvailability = await VendorAvailability.findOne({ vendorId: body.vendorId, isDeleted: { $ne: true } });
   }
-  if (!body.bookingTime) {
+
+  // Automatically determine booking type & scheduling details from BE
+  if (body.timeSlot || body.bookingType === 'schedule') {
     // eslint-disable-next-line no-param-reassign
-    body.bookingTime = formatTime(new Date());
+    body.bookingType = 'schedule';
+    // eslint-disable-next-line no-param-reassign
+    body.bookingDate = body.bookingDate ? new Date(body.bookingDate) : new Date();
+    // eslint-disable-next-line no-param-reassign
+    body.bookingTime = body.timeSlot || body.bookingTime || '9 am - 12 pm';
+  } else {
+    // Vendor is on instant visit or default
+    // eslint-disable-next-line no-param-reassign
+    body.bookingType = (vendorAvailability && vendorAvailability.bookingOption) || 'instant';
+    // eslint-disable-next-line no-param-reassign
+    body.bookingDate = body.bookingDate ? new Date(body.bookingDate) : new Date();
+    // eslint-disable-next-line no-param-reassign
+    body.bookingTime = body.bookingTime || formatTime(new Date());
+    if (body.bookingType === 'instant' && !body.estimatedArrival) {
+      // eslint-disable-next-line no-param-reassign
+      body.estimatedArrival = (vendorAvailability && vendorAvailability.instantArrivalEstimate) || '30-40 mins';
+    }
   }
+
   if (!body.status) {
     // eslint-disable-next-line no-param-reassign
     body.status = EnumStatusOfBookings.PANDING;
@@ -106,7 +125,7 @@ export async function createBookings(body = {}) {
     }
   }
 
-  // Auto-calculate pricing fields
+  // Auto-calculate pricing fields directly from selected services
   const selectedVendorServiceIds = [];
   if (body.vendorServiceId) selectedVendorServiceIds.push(body.vendorServiceId);
   if (body.vendorServiceIds && Array.isArray(body.vendorServiceIds)) {
@@ -115,14 +134,11 @@ export async function createBookings(body = {}) {
 
   const vendorServices = await VendorService.find({ _id: { $in: selectedVendorServiceIds } });
 
-  const totalPeople = (body.menCount || 0) + (body.womenCount || 0) + (body.childBoyCount || 0) + (body.childGirlCount || 0);
-  const multiplier = totalPeople > 0 ? totalPeople : 1;
-
   let subtotal = 0;
   // eslint-disable-next-line no-restricted-syntax
   for (const vs of vendorServices) {
     if (vs.pricingType === 'fixed') {
-      subtotal += (vs.price || 0) * multiplier;
+      subtotal += vs.price || 0;
     }
   }
 

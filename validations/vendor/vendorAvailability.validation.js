@@ -9,23 +9,103 @@ Joi.objectId = require('joi-objectid')(Joi);
 export const createVendorAvailability = {
   body: Joi.object().keys({
     vendorId: Joi.objectId(),
-    day: Joi.number().integer(),
-    startTime: Joi.date(),
-    endTime: Joi.date(),
-    isAvailable: Joi.bool(),
+    storeStatus: Joi.string().valid('online', 'offline').optional(),
+    isOnline: Joi.boolean().optional(),
+    bookingOption: Joi.string().valid('instant', 'schedule').optional(),
+    instantArrivalEstimate: Joi.string().optional(),
+    weeklySchedule: Joi.array()
+      .items(
+        Joi.object({
+          day: Joi.string().required(),
+          dayIndex: Joi.number().integer().min(0).max(6).optional(),
+          isOpen: Joi.boolean().required(),
+          startTime: Joi.string().optional(),
+          endTime: Joi.string().optional(),
+          slots: Joi.array()
+            .items(
+              Joi.object({
+                label: Joi.string().required(),
+                startTime: Joi.string().optional(),
+                endTime: Joi.string().optional(),
+                isAvailable: Joi.boolean().optional(),
+              })
+            )
+            .optional(),
+        })
+      )
+      .optional(),
+    day: Joi.number().integer().optional(),
+    startTime: Joi.date().optional(),
+    endTime: Joi.date().optional(),
+    isAvailable: Joi.bool().optional(),
   }),
 };
 
 export const updateVendorAvailability = {
   body: Joi.object().keys({
     vendorId: Joi.objectId(),
-    day: Joi.number().integer(),
-    startTime: Joi.date(),
-    endTime: Joi.date(),
-    isAvailable: Joi.bool(),
+    storeStatus: Joi.string().valid('online', 'offline').optional(),
+    isOnline: Joi.boolean().optional(),
+    bookingOption: Joi.string().valid('instant', 'schedule').optional(),
+    instantArrivalEstimate: Joi.string().optional(),
+    weeklySchedule: Joi.array()
+      .items(
+        Joi.object({
+          day: Joi.string().required(),
+          dayIndex: Joi.number().integer().min(0).max(6).optional(),
+          isOpen: Joi.boolean().required(),
+          startTime: Joi.string().optional(),
+          endTime: Joi.string().optional(),
+          slots: Joi.array()
+            .items(
+              Joi.object({
+                label: Joi.string().required(),
+                startTime: Joi.string().optional(),
+                endTime: Joi.string().optional(),
+                isAvailable: Joi.boolean().optional(),
+              })
+            )
+            .optional(),
+        })
+      )
+      .optional(),
+    day: Joi.number().integer().optional(),
+    startTime: Joi.date().optional(),
+    endTime: Joi.date().optional(),
+    isAvailable: Joi.bool().optional(),
   }),
   params: Joi.object().keys({
     vendorAvailabilityId: Joi.objectId().required(),
+  }),
+};
+
+export const saveMyAvailability = {
+  body: Joi.object().keys({
+    storeStatus: Joi.string().valid('online', 'offline').optional(),
+    isOnline: Joi.boolean().optional(),
+    bookingOption: Joi.string().valid('instant', 'schedule').optional(),
+    instantArrivalEstimate: Joi.string().optional(),
+    weeklySchedule: Joi.array()
+      .items(
+        Joi.object({
+          day: Joi.string().required(),
+          dayIndex: Joi.number().integer().min(0).max(6).optional(),
+          isOpen: Joi.boolean().required(),
+          startTime: Joi.string().optional(),
+          endTime: Joi.string().optional(),
+          slots: Joi.array()
+            .items(
+              Joi.object({
+                label: Joi.string().required(),
+                startTime: Joi.string().optional(),
+                endTime: Joi.string().optional(),
+                isAvailable: Joi.boolean().optional(),
+              })
+            )
+            .optional(),
+        })
+      )
+      .optional(),
   }),
 };
 

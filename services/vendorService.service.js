@@ -172,6 +172,7 @@ export async function updateVendorService(filter, body, options = {}) {
     if (!serviceId) {
       throw new ApiError(httpStatus.BAD_REQUEST, 'field serviceId is not valid');
     }
+    // eslint-disable-next-line no-param-reassign
     body.categoryId = serviceId.categoryId;
   }
   const vendorService = await VendorService.findOneAndUpdate(filter, body, options);
@@ -272,6 +273,15 @@ export async function getNearVendorServicesByCategory(longitude, latitude, categ
       },
     },
     { $unwind: { path: '$categoryDetails', preserveNullAndEmptyArrays: true } },
+    {
+      $lookup: {
+        from: 'VendorAvailability',
+        localField: 'vendorUser._id',
+        foreignField: 'vendorId',
+        as: 'vendorAvailability',
+      },
+    },
+    { $unwind: { path: '$vendorAvailability', preserveNullAndEmptyArrays: true } },
     { $match: serviceMatch },
     {
       $addFields: {
@@ -283,6 +293,7 @@ export async function getNearVendorServicesByCategory(longitude, latitude, categ
     {
       $project: {
         _id: '$vendorService._id',
+        vendorId: '$vendorUser._id',
         pricingType: '$vendorService.pricingType',
         price: '$vendorService.price',
         profilePic: { $ifNull: ['$profilePic', '$profileImage'] },
@@ -293,6 +304,12 @@ export async function getNearVendorServicesByCategory(longitude, latitude, categ
         distance: '$distance',
         isWithin5km: '$isWithin5km',
         visitCharges: '$vendorUser.visitCharges',
+        vendorAvailability: {
+          isOnline: { $ifNull: ['$vendorAvailability.isOnline', true] },
+          storeStatus: { $ifNull: ['$vendorAvailability.storeStatus', 'online'] },
+          bookingOption: { $ifNull: ['$vendorAvailability.bookingOption', 'instant'] },
+          instantArrivalEstimate: { $ifNull: ['$vendorAvailability.instantArrivalEstimate', '30-40 mins'] },
+        },
       },
     },
     {
@@ -310,8 +327,8 @@ export async function getNearVendorServicesByCategory(longitude, latitude, categ
   ];
 
   const results = await User.aggregate(pipeline);
-  const total = results[0]?.metadata[0]?.total || 0;
-  const data = results[0]?.data || [];
+  const total = (results[0] && results[0].metadata && results[0].metadata[0] && results[0].metadata[0].total) || 0;
+  const data = (results[0] && results[0].data) || [];
 
   const docsWithCharge = data.map((doc) => {
     let visitCharge = null;
@@ -327,10 +344,12 @@ export async function getNearVendorServicesByCategory(longitude, latitude, categ
 
     const finalDoc = {
       _id: doc._id,
+      vendorId: doc.vendorId,
       pricingType: doc.pricingType,
       profilePic: doc.profilePic,
       businessName: doc.businessName,
       serviceDetails: doc.serviceDetails,
+      vendorAvailability: doc.vendorAvailability,
     };
 
     if (doc.pricingType === 'fixed') {
@@ -408,6 +427,15 @@ export async function getVendorServicesByCategoryWithoutLocation(categoryId, opt
       },
     },
     { $unwind: { path: '$categoryDetails', preserveNullAndEmptyArrays: true } },
+    {
+      $lookup: {
+        from: 'VendorAvailability',
+        localField: 'vendorUser._id',
+        foreignField: 'vendorId',
+        as: 'vendorAvailability',
+      },
+    },
+    { $unwind: { path: '$vendorAvailability', preserveNullAndEmptyArrays: true } },
     { $match: serviceMatch },
     {
       $addFields: {
@@ -418,6 +446,7 @@ export async function getVendorServicesByCategoryWithoutLocation(categoryId, opt
     {
       $project: {
         _id: '$vendorService._id',
+        vendorId: '$vendorUser._id',
         pricingType: '$vendorService.pricingType',
         price: '$vendorService.price',
         profilePic: { $ifNull: ['$profilePic', '$profileImage'] },
@@ -428,6 +457,12 @@ export async function getVendorServicesByCategoryWithoutLocation(categoryId, opt
         distance: '$distance',
         isWithin5km: '$isWithin5km',
         visitCharges: '$vendorUser.visitCharges',
+        vendorAvailability: {
+          isOnline: { $ifNull: ['$vendorAvailability.isOnline', true] },
+          storeStatus: { $ifNull: ['$vendorAvailability.storeStatus', 'online'] },
+          bookingOption: { $ifNull: ['$vendorAvailability.bookingOption', 'instant'] },
+          instantArrivalEstimate: { $ifNull: ['$vendorAvailability.instantArrivalEstimate', '30-40 mins'] },
+        },
       },
     },
     {
@@ -444,8 +479,8 @@ export async function getVendorServicesByCategoryWithoutLocation(categoryId, opt
   ];
 
   const results = await User.aggregate(pipeline);
-  const total = results[0]?.metadata[0]?.total || 0;
-  const data = results[0]?.data || [];
+  const total = (results[0] && results[0].metadata && results[0].metadata[0] && results[0].metadata[0].total) || 0;
+  const data = (results[0] && results[0].data) || [];
 
   const docsWithCharge = data.map((doc) => {
     let visitCharge = null;
@@ -461,10 +496,12 @@ export async function getVendorServicesByCategoryWithoutLocation(categoryId, opt
 
     const finalDoc = {
       _id: doc._id,
+      vendorId: doc.vendorId,
       pricingType: doc.pricingType,
       profilePic: doc.profilePic,
       businessName: doc.businessName,
       serviceDetails: doc.serviceDetails,
+      vendorAvailability: doc.vendorAvailability,
     };
 
     if (doc.pricingType === 'fixed') {

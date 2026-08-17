@@ -24,6 +24,21 @@ router
     vendorAvailabilityController.listVendorAvailability
   );
 router
+  .route('/my-availability')
+  /**
+   * getMyAvailability
+   * */
+  .get(auth('vendor'), vendorAvailabilityController.getMyAvailability)
+  /**
+   * saveMyAvailability
+   * */
+  .put(
+    auth('vendor'),
+    validate(vendorAvailabilityValidation.saveMyAvailability),
+    vendorAvailabilityController.saveMyAvailability
+  );
+
+router
   .route('/paginated')
   /**
    * getVendorAvailabilityPaginated

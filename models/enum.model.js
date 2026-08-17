@@ -122,6 +122,23 @@ const EnumPricingType = {
   FIXED: 'fixed',
   VISITING: 'visiting',
 };
+const EnumBookingOption = {
+  INSTANT: 'instant',
+  SCHEDULE: 'schedule',
+};
+const EnumStoreStatus = {
+  ONLINE: 'online',
+  OFFLINE: 'offline',
+};
+const EnumDayOfWeek = {
+  MONDAY: 'monday',
+  TUESDAY: 'tuesday',
+  WEDNESDAY: 'wednesday',
+  THURSDAY: 'thursday',
+  FRIDAY: 'friday',
+  SATURDAY: 'saturday',
+  SUNDAY: 'sunday',
+};
 module.exports = {
   EnumRoleOfUser,
   EnumCodeTypeOfCode,
@@ -145,4 +162,7 @@ module.exports = {
   EnumTypeOfToken,
   EnumOfImageTypes,
   EnumPricingType,
+  EnumBookingOption,
+  EnumStoreStatus,
+  EnumDayOfWeek,
 };

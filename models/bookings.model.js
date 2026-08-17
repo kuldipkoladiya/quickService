@@ -76,10 +76,21 @@ const BookingsSchema = new mongoose.Schema(
       type: mongoose.Schema.Types.ObjectId,
       ref: 'Address',
     },
+    bookingType: {
+      type: String,
+      enum: Object.values(enumModel.EnumBookingOption),
+      default: enumModel.EnumBookingOption.INSTANT,
+    },
     bookingDate: {
       type: Date,
     },
     bookingTime: {
+      type: String,
+    },
+    timeSlot: {
+      type: String,
+    },
+    estimatedArrival: {
       type: String,
     },
     serviceStartTime: {
