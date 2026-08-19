@@ -67,11 +67,14 @@ export async function getBookingSummaryDetails(identifier) {
     .populate({
       path: 'vendorId',
       populate: [
-        { path: 'userId', select: 'name fullName email mobileNumber profileImage profilePic location images' },
+        {
+          path: 'userId',
+          select: 'name fullName email mobileNumber profileImage profilePic userProfilePic location images',
+        },
         { path: 'categoryId', select: 'name title image' },
       ],
     })
-    .populate('customerId', 'name fullName email mobileNumber profileImage profilePic')
+    .populate('customerId', 'name fullName email mobileNumber profileImage profilePic userProfilePic')
     .populate('addressId')
     .populate('vendorServiceId')
     .populate('serviceIds');
@@ -241,7 +244,14 @@ export async function getBookingSummaryDetails(identifier) {
   const vendorImages =
     vendorUserAccount.images && vendorUserAccount.images.length > 0 ? vendorUserAccount.images.map((img) => img.url) : [];
 
-  const vendorProfileImage = vendorUserAccount.profileImage || vendorUserAccount.profilePic || vendorImages[0] || null;
+  const userProfilePicUrl =
+    (vendorUserAccount.userProfilePic &&
+      vendorUserAccount.userProfilePic.length > 0 &&
+      vendorUserAccount.userProfilePic[0].url) ||
+    null;
+
+  const vendorProfilePic =
+    vendorUserAccount.profilePic || vendorUserAccount.profileImage || userProfilePicUrl || vendorImages[0] || null;
 
   // Format Address for UI
   const addressObj = booking.addressId || {};
@@ -263,7 +273,8 @@ export async function getBookingSummaryDetails(identifier) {
       totalReviews: vendorTotalReviews,
       isVerified: vendorIsVerified,
       location: vendorLocation,
-      profileImage: vendorProfileImage,
+      profilePic: vendorProfilePic,
+      profileImage: vendorProfilePic,
       category: vendorUserObj.categoryId ? vendorUserObj.categoryId.name || vendorUserObj.categoryId.title : null,
       businessAddress: vendorBusinessAddress,
     },
