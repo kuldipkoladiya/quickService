@@ -129,7 +129,10 @@ export async function getBookingSummaryDetails(identifier) {
   // Extract service breakdown
   const serviceDetails = [];
   let calculatedServicesTotal = 0;
+  let fixedServicesTotal = 0;
+  let hasVisitingService = false;
   const processedServiceIds = new Set();
+  const singleVisitCharge = getVendorVisitCharge(vendorUserObj, distanceKm);
 
   // eslint-disable-next-line no-restricted-syntax
   for (const vs of vendorServicesList) {
@@ -139,23 +142,38 @@ export async function getBookingSummaryDetails(identifier) {
       const rawTitle = (vs.serviceId && vs.serviceId.title) || vs.title || 'Service';
       const pricingType = vs.pricingType || 'fixed';
 
-      let price = 0;
+      let itemPrice = 0;
       if (pricingType === 'fixed') {
-        price = vs.price !== undefined && vs.price !== null ? vs.price : 0;
+        itemPrice = vs.price !== undefined && vs.price !== null ? vs.price : 0;
+        fixedServicesTotal += itemPrice;
       } else if (pricingType === 'visiting') {
-        price = getVendorVisitCharge(vendorUserObj, distanceKm);
+        hasVisitingService = true;
+        itemPrice = singleVisitCharge;
       }
 
-      calculatedServicesTotal += price;
       serviceDetails.push({
         vendorServiceId: vs._id,
         serviceId: vs.serviceId ? vs.serviceId._id : null,
         title: rawTitle.endsWith('Fee') ? rawTitle : `${rawTitle} Fee`,
         rawTitle,
         pricingType,
-        price,
+        price: itemPrice,
       });
     }
+  }
+
+  // Calculate services total and subtotal according to pricing type
+  if (fixedServicesTotal > 0) {
+    calculatedServicesTotal = fixedServicesTotal;
+  } else if (hasVisitingService || vendorUserObj) {
+    calculatedServicesTotal = singleVisitCharge;
+  }
+
+  let calculatedSubtotal = 0;
+  if (fixedServicesTotal > 0) {
+    calculatedSubtotal = fixedServicesTotal + (hasVisitingService ? singleVisitCharge : 0);
+  } else if (hasVisitingService || vendorUserObj) {
+    calculatedSubtotal = singleVisitCharge;
   }
 
   // If no vendorServices were matched but serviceIds exists, extract directly from serviceIds
@@ -168,37 +186,35 @@ export async function getBookingSummaryDetails(identifier) {
     // eslint-disable-next-line no-restricted-syntax
     for (const s of booking.serviceIds) {
       const rawTitle = s.title || 'Service';
-      const defaultVisitCharge = getVendorVisitCharge(vendorUserObj, distanceKm);
-      const price = booking.subtotal ? Math.round(booking.subtotal / booking.serviceIds.length) : defaultVisitCharge;
-      calculatedServicesTotal += price;
       serviceDetails.push({
         vendorServiceId: booking.vendorServiceId ? booking.vendorServiceId._id || booking.vendorServiceId : null,
         serviceId: s._id || s,
         title: rawTitle.endsWith('Fee') ? rawTitle : `${rawTitle} Fee`,
         rawTitle,
-        pricingType: 'fixed',
-        price,
+        pricingType: 'visiting',
+        price: singleVisitCharge,
       });
     }
+    calculatedServicesTotal = singleVisitCharge;
+    calculatedSubtotal = singleVisitCharge;
   }
 
   // If still empty fallback
   if (serviceDetails.length === 0) {
-    const defaultVisitCharge = getVendorVisitCharge(vendorUserObj, distanceKm);
-    const price = booking.subtotal || defaultVisitCharge;
-    calculatedServicesTotal = price;
     serviceDetails.push({
       vendorServiceId: booking.vendorServiceId ? booking.vendorServiceId._id || booking.vendorServiceId : null,
       serviceId: booking.serviceId || null,
-      title: 'Service Fee',
-      rawTitle: 'Service',
-      pricingType: 'fixed',
-      price,
+      title: 'Visiting Fee',
+      rawTitle: 'Visiting Service',
+      pricingType: 'visiting',
+      price: singleVisitCharge,
     });
+    calculatedServicesTotal = singleVisitCharge;
+    calculatedSubtotal = singleVisitCharge;
   }
 
-  const subtotal = Math.max(booking.subtotal || 0, calculatedServicesTotal);
-  const visitingCharge = Math.max(0, subtotal - calculatedServicesTotal);
+  const subtotal = booking.subtotal ? booking.subtotal : calculatedSubtotal;
+  const visitingCharge = hasVisitingService ? singleVisitCharge : 0;
   const serviceFee =
     booking.serviceFee !== undefined && booking.serviceFee > 0
       ? booking.serviceFee
@@ -476,18 +492,24 @@ export async function createBookings(body = {}) {
   }
 
   let subtotal = 0;
+  let fixedServicesTotal = 0;
+  let hasVisitingService = false;
+
   // eslint-disable-next-line no-restricted-syntax
   for (const vs of vendorServices) {
     if (vs.pricingType === 'fixed') {
-      subtotal += vs.price !== undefined && vs.price !== null ? vs.price : 0;
+      fixedServicesTotal += vs.price !== undefined && vs.price !== null ? vs.price : 0;
     } else if (vs.pricingType === 'visiting') {
-      subtotal += getVendorVisitCharge(vendorUserDoc, distanceKm);
+      hasVisitingService = true;
     }
   }
 
-  // If subtotal is still 0 (e.g. general instant visit booking or single service)
-  if (subtotal === 0 && vendorUserDoc) {
-    subtotal = getVendorVisitCharge(vendorUserDoc, distanceKm);
+  const singleVisitCharge = getVendorVisitCharge(vendorUserDoc, distanceKm);
+
+  if (fixedServicesTotal > 0) {
+    subtotal = fixedServicesTotal + (hasVisitingService ? singleVisitCharge : 0);
+  } else if (hasVisitingService || vendorUserDoc) {
+    subtotal = singleVisitCharge;
   }
 
   // eslint-disable-next-line no-param-reassign
