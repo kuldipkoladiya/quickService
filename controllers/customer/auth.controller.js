@@ -2,7 +2,15 @@ import httpStatus from 'http-status';
 import { generateOtp } from 'utils/common';
 import ApiError from 'utils/ApiError';
 import { catchAsync } from 'utils/catchAsync';
-import { authService, tokenService, userService, emailService, countryCodeService, vendorUserService } from 'services';
+import {
+  authService,
+  tokenService,
+  userService,
+  emailService,
+  countryCodeService,
+  vendorUserService,
+  addressService,
+} from 'services';
 
 import { EnumTypeOfToken, EnumCodeTypeOfCode, EnumRoleOfUser } from 'models/enum.model';
 import { sendOtpToMobile } from '../../services/mobileotp.service';
@@ -226,12 +234,21 @@ export const login = catchAsync(async (req, res) => {
     finalUser = await userService.addDeviceToken(user, req.body);
   }
 
-  const userJson = finalUser.toJSON();
+  const userJson = finalUser.toJSON ? finalUser.toJSON() : finalUser;
   if (vendorUser) {
     userJson.vendorUser = vendorUser;
   }
+  const addresses = await addressService.getAddressList({ userId: user._id, isDeleted: { $ne: true } });
+  userJson.addresses = addresses || [];
 
-  res.status(httpStatus.OK).send({ results: { user: userJson, tokens, ...(vendorUser && { vendorUser }) } });
+  res.status(httpStatus.OK).send({
+    results: {
+      user: userJson,
+      tokens,
+      addresses: addresses || [],
+      ...(vendorUser && { vendorUser }),
+    },
+  });
 });
 
 // if user's email is not verified then we call this function for reverification
@@ -296,6 +313,8 @@ export const verifyOtpCustomer = catchAsync(async (req, res) => {
     updatedUser = await userService.addDeviceToken(user, req.body);
   }
 
+  const addresses = await addressService.getAddressList({ userId: user._id, isDeleted: { $ne: true } });
+
   return res.status(httpStatus.OK).send({
     results: {
       success: true,
@@ -306,7 +325,9 @@ export const verifyOtpCustomer = catchAsync(async (req, res) => {
         mobileNumber: updatedUser.mobileNumber,
         fullName: updatedUser.fullName,
         role: updatedUser.role,
+        addresses: addresses || [],
       },
+      addresses: addresses || [],
       tokens,
     },
   });
@@ -370,7 +391,10 @@ export const resetPasswordToken = catchAsync(async (req, res) => {
 
 export const userInfo = catchAsync(async (req, res) => {
   const user = await userService.getUserById(req.user._id);
-  res.status(httpStatus.OK).send({ results: { user } });
+  const addresses = await addressService.getAddressList({ userId: req.user._id, isDeleted: { $ne: true } });
+  const userJson = user.toJSON ? user.toJSON() : user;
+  userJson.addresses = addresses || [];
+  res.status(httpStatus.OK).send({ results: { user: userJson, addresses: addresses || [] } });
 });
 
 /**
@@ -496,7 +520,10 @@ export const logout = catchAsync(async (req, res) => {
 export const socialLogin = catchAsync(async (req, res) => {
   const user = await authService.socialLogin(req.user);
   const token = await tokenService.generateAuthTokens(req.user);
-  res.status(httpStatus.OK).send({ results: { user, token } });
+  const addresses = await addressService.getAddressList({ userId: req.user._id, isDeleted: { $ne: true } });
+  const userJson = user.toJSON ? user.toJSON() : user;
+  userJson.addresses = addresses || [];
+  res.status(httpStatus.OK).send({ results: { user: userJson, token, addresses: addresses || [] } });
 });
 
 export const registerDeviceToken = catchAsync(async (req, res) => {
