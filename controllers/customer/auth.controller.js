@@ -245,7 +245,6 @@ export const login = catchAsync(async (req, res) => {
     results: {
       user: userJson,
       tokens,
-      addresses: addresses || [],
       ...(vendorUser && { vendorUser }),
     },
   });
@@ -327,7 +326,6 @@ export const verifyOtpCustomer = catchAsync(async (req, res) => {
         role: updatedUser.role,
         addresses: addresses || [],
       },
-      addresses: addresses || [],
       tokens,
     },
   });
@@ -394,7 +392,7 @@ export const userInfo = catchAsync(async (req, res) => {
   const addresses = await addressService.getAddressList({ userId: req.user._id, isDeleted: { $ne: true } });
   const userJson = user.toJSON ? user.toJSON() : user;
   userJson.addresses = addresses || [];
-  res.status(httpStatus.OK).send({ results: { user: userJson, addresses: addresses || [] } });
+  res.status(httpStatus.OK).send({ results: { user: userJson } });
 });
 
 /**
@@ -523,7 +521,7 @@ export const socialLogin = catchAsync(async (req, res) => {
   const addresses = await addressService.getAddressList({ userId: req.user._id, isDeleted: { $ne: true } });
   const userJson = user.toJSON ? user.toJSON() : user;
   userJson.addresses = addresses || [];
-  res.status(httpStatus.OK).send({ results: { user: userJson, token, addresses: addresses || [] } });
+  res.status(httpStatus.OK).send({ results: { user: userJson, token } });
 });
 
 export const registerDeviceToken = catchAsync(async (req, res) => {
