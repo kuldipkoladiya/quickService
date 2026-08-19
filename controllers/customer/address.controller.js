@@ -5,7 +5,6 @@
 import httpStatus from 'http-status';
 import { addressService } from 'services';
 import { catchAsync } from 'utils/catchAsync';
-import { pick } from '../../utils/pick';
 
 export const getAddress = catchAsync(async (req, res) => {
   const { addressId } = req.params;
@@ -19,8 +18,21 @@ export const getAddress = catchAsync(async (req, res) => {
 });
 
 export const listAddress = catchAsync(async (req, res) => {
+  const userId = req.query.userId || req.user._id;
   const filter = {
-    userId: req.user._id,
+    userId,
+    isDeleted: { $ne: true },
+  };
+  const options = {};
+  const address = await addressService.getAddressList(filter, options);
+  return res.status(httpStatus.OK).send({ results: address });
+});
+
+export const getAddressesByUserId = catchAsync(async (req, res) => {
+  const { userId } = req.params;
+  const filter = {
+    userId: userId || req.user._id,
+    isDeleted: { $ne: true },
   };
   const options = {};
   const address = await addressService.getAddressList(filter, options);

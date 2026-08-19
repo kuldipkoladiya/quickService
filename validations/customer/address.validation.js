@@ -44,6 +44,12 @@ export const getAddressById = {
   }),
 };
 
+export const getAddressByUserId = {
+  params: Joi.object().keys({
+    userId: Joi.objectId().required(),
+  }),
+};
+
 export const deleteAddressById = {
   params: Joi.object().keys({
     addressId: Joi.objectId().required(),

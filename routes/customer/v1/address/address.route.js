@@ -22,6 +22,12 @@ router
    * */
   .get(auth('customer'), validate(addressValidation.paginatedAddress), addressController.paginateAddress);
 router
+  .route('/user/:userId')
+  /**
+   * getAddressesByUserId
+   * */
+  .get(auth('customer'), validate(addressValidation.getAddressByUserId), addressController.getAddressesByUserId);
+router
   .route('/:addressId')
   /**
    * getAddressById
