@@ -29,8 +29,16 @@ export async function createAddress(body = {}) {
       throw new ApiError(httpStatus.BAD_REQUEST, 'field userId is not valid');
     }
   }
-  if (body.isDefault === true && body.userId) {
-    await Address.updateMany({ userId: body.userId }, { isDefault: false });
+  const isDefaultBool = body.isDefault === true || body.isDefault === 'true';
+  if (isDefaultBool) {
+    // eslint-disable-next-line no-param-reassign
+    body.isDefault = true;
+    if (body.userId) {
+      await Address.updateMany({ userId: body.userId }, { $set: { isDefault: false } });
+    }
+  } else if (body.isDefault === false || body.isDefault === 'false') {
+    // eslint-disable-next-line no-param-reassign
+    body.isDefault = false;
   }
   const address = await Address.create(body);
   return address;
@@ -43,16 +51,23 @@ export async function updateAddress(filter, body, options = {}) {
       throw new ApiError(httpStatus.BAD_REQUEST, 'field userId is not valid');
     }
   }
-  if (body.isDefault === true) {
-    const userId = body.userId || filter.userId;
-    if (userId) {
-      await Address.updateMany({ userId }, { isDefault: false });
-    } else {
+  const isDefaultBool = body.isDefault === true || body.isDefault === 'true';
+  if (isDefaultBool) {
+    // eslint-disable-next-line no-param-reassign
+    body.isDefault = true;
+    let userId = body.userId || filter.userId;
+    if (!userId) {
       const existingAddress = await Address.findOne(filter);
       if (existingAddress) {
-        await Address.updateMany({ userId: existingAddress.userId }, { isDefault: false });
+        userId = existingAddress.userId;
       }
     }
+    if (userId) {
+      await Address.updateMany({ userId }, { $set: { isDefault: false } });
+    }
+  } else if (body.isDefault === false || body.isDefault === 'false') {
+    // eslint-disable-next-line no-param-reassign
+    body.isDefault = false;
   }
   const address = await Address.findOneAndUpdate(filter, body, options);
   return address;
