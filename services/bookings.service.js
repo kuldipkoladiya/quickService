@@ -37,7 +37,41 @@ function formatTime(date) {
   return `${hours}:${minutes} ${ampm}`;
 }
 
+async function generateUniqueBookingId() {
+  const characters = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789';
+  let isUnique = false;
+  let bookingId = '';
+  while (!isUnique) {
+    bookingId = '';
+    for (let i = 0; i < 8; i += 1) {
+      bookingId += characters.charAt(Math.floor(Math.random() * characters.length));
+    }
+    // eslint-disable-next-line no-await-in-loop
+    const existing = await Bookings.findOne({ bookingId });
+    if (!existing) {
+      isUnique = true;
+    }
+  }
+  return bookingId;
+}
+
 export async function createBookings(body = {}) {
+  // Automatically generate unique 8-character bookingId if not provided
+  if (!body.bookingId) {
+    // eslint-disable-next-line no-param-reassign
+    body.bookingId = await generateUniqueBookingId();
+  }
+
+  // Automatically default bookingDate and bookingTime to current if not provided
+  const now = new Date();
+  if (!body.bookingDate) {
+    // eslint-disable-next-line no-param-reassign
+    body.bookingDate = now;
+  } else {
+    // eslint-disable-next-line no-param-reassign
+    body.bookingDate = new Date(body.bookingDate);
+  }
+
   let vendorAvailability = null;
   if (body.vendorId) {
     vendorAvailability = await VendorAvailability.findOne({ vendorId: body.vendorId, isDeleted: { $ne: true } });
@@ -48,17 +82,13 @@ export async function createBookings(body = {}) {
     // eslint-disable-next-line no-param-reassign
     body.bookingType = 'schedule';
     // eslint-disable-next-line no-param-reassign
-    body.bookingDate = body.bookingDate ? new Date(body.bookingDate) : new Date();
-    // eslint-disable-next-line no-param-reassign
-    body.bookingTime = body.timeSlot || body.bookingTime || '9 am - 12 pm';
+    body.bookingTime = body.timeSlot || body.bookingTime || formatTime(now);
   } else {
     // Vendor is on instant visit or default
     // eslint-disable-next-line no-param-reassign
     body.bookingType = (vendorAvailability && vendorAvailability.bookingOption) || 'instant';
     // eslint-disable-next-line no-param-reassign
-    body.bookingDate = body.bookingDate ? new Date(body.bookingDate) : new Date();
-    // eslint-disable-next-line no-param-reassign
-    body.bookingTime = body.bookingTime || formatTime(new Date());
+    body.bookingTime = body.bookingTime || formatTime(now);
     if (body.bookingType === 'instant' && !body.estimatedArrival) {
       // eslint-disable-next-line no-param-reassign
       body.estimatedArrival = (vendorAvailability && vendorAvailability.instantArrivalEstimate) || '30-40 mins';
@@ -126,13 +156,24 @@ export async function createBookings(body = {}) {
   }
 
   // Auto-calculate pricing fields directly from selected services
-  const selectedVendorServiceIds = [];
-  if (body.vendorServiceId) selectedVendorServiceIds.push(body.vendorServiceId);
+  const queryConditions = [];
+  if (body.vendorServiceId) {
+    queryConditions.push({ _id: body.vendorServiceId });
+  }
   if (body.vendorServiceIds && Array.isArray(body.vendorServiceIds)) {
-    selectedVendorServiceIds.push(...body.vendorServiceIds);
+    queryConditions.push({ _id: { $in: body.vendorServiceIds } });
+  }
+  if (body.vendorId && body.serviceIds && Array.isArray(body.serviceIds) && body.serviceIds.length > 0) {
+    queryConditions.push({ vendorId: body.vendorId, serviceId: { $in: body.serviceIds } });
   }
 
-  const vendorServices = await VendorService.find({ _id: { $in: selectedVendorServiceIds } });
+  let vendorServices = [];
+  if (queryConditions.length > 0) {
+    vendorServices = await VendorService.find({
+      $or: queryConditions,
+      isDeleted: { $ne: true },
+    });
+  }
 
   let subtotal = 0;
   // eslint-disable-next-line no-restricted-syntax

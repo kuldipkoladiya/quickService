@@ -12,14 +12,9 @@ export const createBookings = {
     bookingId: Joi.string(),
     customerId: Joi.objectId(),
     vendorId: Joi.objectId(),
-    serviceId: Joi.objectId(),
-    vendorServiceId: Joi.objectId(),
-    vendorServiceIds: Joi.array().items(Joi.objectId()).optional(),
+    serviceId: Joi.objectId().optional(),
+    vendorServiceId: Joi.objectId().optional(),
     serviceIds: Joi.array().items(Joi.objectId()).optional(),
-    menCount: Joi.number().integer().optional(),
-    womenCount: Joi.number().integer().optional(),
-    childBoyCount: Joi.number().integer().optional(),
-    childGirlCount: Joi.number().integer().optional(),
     addressId: Joi.objectId(),
     bookingType: Joi.string()
       .valid(...Object.values(enumFields.EnumBookingOption))

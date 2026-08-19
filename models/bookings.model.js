@@ -56,22 +56,7 @@ const BookingsSchema = new mongoose.Schema(
         ref: 'Services',
       },
     ],
-    menCount: {
-      type: Number,
-      default: 0,
-    },
-    womenCount: {
-      type: Number,
-      default: 0,
-    },
-    childBoyCount: {
-      type: Number,
-      default: 0,
-    },
-    childGirlCount: {
-      type: Number,
-      default: 0,
-    },
+
     addressId: {
       type: mongoose.Schema.Types.ObjectId,
       ref: 'Address',
