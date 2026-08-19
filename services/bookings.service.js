@@ -3,10 +3,54 @@ import ApiError from 'utils/ApiError';
 import httpStatus from 'http-status';
 import { Bookings, User, VendorUser, Services, VendorService, Address, BusinessAddress, VendorAvailability } from 'models';
 import { EnumStatusOfBookings } from 'models/enum.model';
+import { calculateVisitCharges } from './vendorUser.service';
 
 export async function getBookingsById(id, options = {}) {
   const bookings = await Bookings.findById(id, options.projection, options);
   return bookings;
+}
+
+function calculateDistanceInKm(lat1, lon1, lat2, lon2) {
+  if (
+    lat1 === undefined ||
+    lat1 === null ||
+    lon1 === undefined ||
+    lon1 === null ||
+    lat2 === undefined ||
+    lat2 === null ||
+    lon2 === undefined ||
+    lon2 === null
+  ) {
+    return null;
+  }
+  const R = 6371; // Earth's radius in km
+  const dLat = ((lat2 - lat1) * Math.PI) / 180;
+  const dLon = ((lon2 - lon1) * Math.PI) / 180;
+  const a =
+    Math.sin(dLat / 2) * Math.sin(dLat / 2) +
+    Math.cos((lat1 * Math.PI) / 180) * Math.cos((lat2 * Math.PI) / 180) * Math.sin(dLon / 2) * Math.sin(dLon / 2);
+  const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+  return R * c;
+}
+
+function getVendorVisitCharge(vendorUser, distanceKm = null) {
+  let visitCharges = vendorUser && vendorUser.visitCharges;
+  if (!visitCharges || !Array.isArray(visitCharges) || visitCharges.length === 0) {
+    const radius = (vendorUser && vendorUser.serviceRadius) || 15;
+    visitCharges = calculateVisitCharges(radius);
+  }
+
+  if (distanceKm !== null && distanceKm !== undefined && Array.isArray(visitCharges) && visitCharges.length > 0) {
+    const matched = visitCharges.find((vc) => distanceKm >= vc.minDistance && distanceKm <= vc.maxDistance);
+    if (matched && matched.charge !== undefined && matched.charge !== null) {
+      return matched.charge;
+    }
+  }
+
+  if (Array.isArray(visitCharges) && visitCharges.length > 0 && visitCharges[0] && visitCharges[0].charge) {
+    return visitCharges[0].charge;
+  }
+  return 100;
 }
 
 export async function getBookingSummaryDetails(identifier) {
@@ -36,6 +80,10 @@ export async function getBookingSummaryDetails(identifier) {
     throw new ApiError(httpStatus.NOT_FOUND, 'Booking not found');
   }
 
+  // Format Vendor info for UI
+  const vendorUserObj = booking.vendorId || {};
+  const vendorUserAccount = vendorUserObj.userId || {};
+
   // Get Vendor's business address
   let vendorBusinessAddress = null;
   if (booking.vendorId) {
@@ -44,6 +92,18 @@ export async function getBookingSummaryDetails(identifier) {
       userId: vendorUserId,
       isDeleted: { $ne: true },
     });
+  }
+
+  // Calculate distance if coordinates are available
+  let distanceKm = null;
+  if (
+    booking.latitude &&
+    booking.longitude &&
+    vendorUserAccount.location &&
+    Array.isArray(vendorUserAccount.location.coordinates)
+  ) {
+    const [lon2, lat2] = vendorUserAccount.location.coordinates;
+    distanceKm = calculateDistanceInKm(booking.latitude, booking.longitude, lat2, lon2);
   }
 
   // Find all vendor services for this vendor and selected serviceIds
@@ -76,46 +136,80 @@ export async function getBookingSummaryDetails(identifier) {
     const sId = vs.serviceId && vs.serviceId._id ? vs.serviceId._id.toString() : vs._id.toString();
     if (!processedServiceIds.has(sId)) {
       processedServiceIds.add(sId);
-      const title = (vs.serviceId && vs.serviceId.title) || vs.title || 'Service Fee';
-      const price = vs.price || 0;
+      const rawTitle = (vs.serviceId && vs.serviceId.title) || vs.title || 'Service';
+      const pricingType = vs.pricingType || 'fixed';
+
+      let price = 0;
+      if (pricingType === 'fixed') {
+        price = vs.price !== undefined && vs.price !== null ? vs.price : 0;
+      } else if (pricingType === 'visiting') {
+        price = getVendorVisitCharge(vendorUserObj, distanceKm);
+      }
+
       calculatedServicesTotal += price;
       serviceDetails.push({
         vendorServiceId: vs._id,
         serviceId: vs.serviceId ? vs.serviceId._id : null,
-        title: title.endsWith('Fee') ? title : `${title} Fee`,
-        rawTitle: title,
-        pricingType: vs.pricingType || 'fixed',
+        title: rawTitle.endsWith('Fee') ? rawTitle : `${rawTitle} Fee`,
+        rawTitle,
+        pricingType,
         price,
       });
     }
   }
 
-  // If no vendorServices found, fallback
-  if (serviceDetails.length === 0) {
-    if (booking.vendorServiceId) {
-      const price = booking.subtotal || 0;
+  // If no vendorServices were matched but serviceIds exists, extract directly from serviceIds
+  if (
+    serviceDetails.length === 0 &&
+    booking.serviceIds &&
+    Array.isArray(booking.serviceIds) &&
+    booking.serviceIds.length > 0
+  ) {
+    // eslint-disable-next-line no-restricted-syntax
+    for (const s of booking.serviceIds) {
+      const rawTitle = s.title || 'Service';
+      const defaultVisitCharge = getVendorVisitCharge(vendorUserObj, distanceKm);
+      const price = booking.subtotal ? Math.round(booking.subtotal / booking.serviceIds.length) : defaultVisitCharge;
+      calculatedServicesTotal += price;
       serviceDetails.push({
-        vendorServiceId: booking.vendorServiceId._id,
-        serviceId: booking.serviceId || null,
-        title: 'Service Fee',
-        rawTitle: 'Service',
+        vendorServiceId: booking.vendorServiceId ? booking.vendorServiceId._id || booking.vendorServiceId : null,
+        serviceId: s._id || s,
+        title: rawTitle.endsWith('Fee') ? rawTitle : `${rawTitle} Fee`,
+        rawTitle,
         pricingType: 'fixed',
         price,
       });
-      calculatedServicesTotal = price;
     }
   }
 
-  const subtotal = booking.subtotal || calculatedServicesTotal;
+  // If still empty fallback
+  if (serviceDetails.length === 0) {
+    const defaultVisitCharge = getVendorVisitCharge(vendorUserObj, distanceKm);
+    const price = booking.subtotal || defaultVisitCharge;
+    calculatedServicesTotal = price;
+    serviceDetails.push({
+      vendorServiceId: booking.vendorServiceId ? booking.vendorServiceId._id || booking.vendorServiceId : null,
+      serviceId: booking.serviceId || null,
+      title: 'Service Fee',
+      rawTitle: 'Service',
+      pricingType: 'fixed',
+      price,
+    });
+  }
+
+  const subtotal = Math.max(booking.subtotal || 0, calculatedServicesTotal);
   const visitingCharge = Math.max(0, subtotal - calculatedServicesTotal);
-  const serviceFee = booking.serviceFee !== undefined ? booking.serviceFee : Math.round(subtotal * 0.05 * 100) / 100;
-  const tax = booking.tax !== undefined ? booking.tax : Math.round(subtotal * 0.05 * 100) / 100;
+  const serviceFee =
+    booking.serviceFee !== undefined && booking.serviceFee > 0
+      ? booking.serviceFee
+      : Math.round(subtotal * 0.05 * 100) / 100;
+  const tax = booking.tax !== undefined && booking.tax > 0 ? booking.tax : Math.round(subtotal * 0.05 * 100) / 100;
   const totalPayable =
-    booking.totalAmount !== undefined ? booking.totalAmount : Math.round((subtotal + serviceFee + tax) * 100) / 100;
+    booking.totalAmount !== undefined && booking.totalAmount > 0
+      ? booking.totalAmount
+      : Math.round((subtotal + serviceFee + tax) * 100) / 100;
 
   // Format Vendor info for UI
-  const vendorUserObj = booking.vendorId || {};
-  const vendorUserAccount = vendorUserObj.userId || {};
   const vendorName =
     vendorUserObj.businessName || vendorUserAccount.fullName || vendorUserAccount.name || 'Star Unisex Saloon';
   const vendorRating = vendorUserObj.rating || 4.5;
@@ -362,44 +456,39 @@ export async function createBookings(body = {}) {
     });
   }
 
+  let vendorUserDoc = null;
+  if (body.vendorId) {
+    vendorUserDoc = await VendorUser.findById(body.vendorId).populate('userId');
+  }
+
+  // Calculate distance if coordinates are passed
+  let distanceKm = null;
+  if (
+    body.latitude &&
+    body.longitude &&
+    vendorUserDoc &&
+    vendorUserDoc.userId &&
+    vendorUserDoc.userId.location &&
+    Array.isArray(vendorUserDoc.userId.location.coordinates)
+  ) {
+    const [lon2, lat2] = vendorUserDoc.userId.location.coordinates;
+    distanceKm = calculateDistanceInKm(body.latitude, body.longitude, lat2, lon2);
+  }
+
   let subtotal = 0;
   // eslint-disable-next-line no-restricted-syntax
   for (const vs of vendorServices) {
     if (vs.pricingType === 'fixed') {
-      subtotal += vs.price || 0;
+      subtotal += vs.price !== undefined && vs.price !== null ? vs.price : 0;
+    } else if (vs.pricingType === 'visiting') {
+      subtotal += getVendorVisitCharge(vendorUserDoc, distanceKm);
     }
   }
 
-  // Calculate visit charge if coordinates are passed for visiting charge calculation
-  let visitCharge = 0;
-  if (body.latitude && body.longitude && body.vendorId) {
-    const vendorUser = await VendorUser.findById(body.vendorId).populate('userId');
-    if (vendorUser && vendorUser.userId && vendorUser.userId.location && vendorUser.userId.location.coordinates) {
-      const lat1 = body.latitude;
-      const lon1 = body.longitude;
-      const [lon2, lat2] = vendorUser.userId.location.coordinates;
-
-      const R = 6371; // Earth's radius in km
-      const dLat = ((lat2 - lat1) * Math.PI) / 180;
-      const dLon = ((lon2 - lon1) * Math.PI) / 180;
-      const a =
-        Math.sin(dLat / 2) * Math.sin(dLat / 2) +
-        Math.cos((lat1 * Math.PI) / 180) * Math.cos((lat2 * Math.PI) / 180) * Math.sin(dLon / 2) * Math.sin(dLon / 2);
-      const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
-      const distanceKm = R * c;
-
-      if (vendorUser.visitCharges && Array.isArray(vendorUser.visitCharges)) {
-        const matchedCharge = vendorUser.visitCharges.find(
-          (vc) => distanceKm >= vc.minDistance && distanceKm <= vc.maxDistance
-        );
-        if (matchedCharge) {
-          visitCharge = matchedCharge.charge || 0;
-        }
-      }
-    }
+  // If subtotal is still 0 (e.g. general instant visit booking or single service)
+  if (subtotal === 0 && vendorUserDoc) {
+    subtotal = getVendorVisitCharge(vendorUserDoc, distanceKm);
   }
-
-  subtotal += visitCharge;
 
   // eslint-disable-next-line no-param-reassign
   body.subtotal = subtotal;
