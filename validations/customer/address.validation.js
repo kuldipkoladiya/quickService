@@ -11,27 +11,31 @@ export const createAddress = {
   body: Joi.object().keys({
     address: Joi.string(),
     userId: Joi.objectId().optional(),
-    floor: Joi.string(),
-    locationType: Joi.string().valid(...Object.values(enumFields.EnumLocationTypeOfAddress)),
-    landmark: Joi.string(),
-    receiverName: Joi.string(),
-    receiverMobile: Joi.number().integer(),
-    isDefault: Joi.bool(),
-    location: Joi.string(),
+    floor: Joi.string().allow('', null).optional(),
+    locationType: Joi.string()
+      .valid(...Object.values(enumFields.EnumLocationTypeOfAddress))
+      .optional(),
+    landmark: Joi.string().allow('', null).optional(),
+    receiverName: Joi.string().allow('', null).optional(),
+    receiverMobile: Joi.number().integer().allow('', null).optional(),
+    isDefault: Joi.bool().optional(),
+    location: Joi.string().allow('', null).optional(),
   }),
 };
 
 export const updateAddress = {
   body: Joi.object().keys({
-    address: Joi.string(),
-    userId: Joi.objectId(),
-    floor: Joi.string(),
-    locationType: Joi.string().valid(...Object.values(enumFields.EnumLocationTypeOfAddress)),
-    landmark: Joi.string(),
-    receiverName: Joi.string(),
-    receiverMobile: Joi.number().integer(),
-    isDefault: Joi.bool(),
-    location: Joi.string(),
+    address: Joi.string().optional(),
+    userId: Joi.objectId().optional(),
+    floor: Joi.string().allow('', null).optional(),
+    locationType: Joi.string()
+      .valid(...Object.values(enumFields.EnumLocationTypeOfAddress))
+      .optional(),
+    landmark: Joi.string().allow('', null).optional(),
+    receiverName: Joi.string().allow('', null).optional(),
+    receiverMobile: Joi.number().integer().allow('', null).optional(),
+    isDefault: Joi.bool().optional(),
+    location: Joi.string().allow('', null).optional(),
   }),
   params: Joi.object().keys({
     addressId: Joi.objectId().required(),
