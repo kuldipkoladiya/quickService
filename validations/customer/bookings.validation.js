@@ -75,7 +75,7 @@ export const updateBookings = {
 
 export const getBookingsById = {
   params: Joi.object().keys({
-    bookingsId: Joi.objectId().required(),
+    bookingsId: Joi.string().required(),
   }),
 };
 

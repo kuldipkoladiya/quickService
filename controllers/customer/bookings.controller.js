@@ -5,16 +5,11 @@
 import httpStatus from 'http-status';
 import { bookingsService } from 'services';
 import { catchAsync } from 'utils/catchAsync';
-import { pick } from '../../utils/pick';
 
 export const getBookings = catchAsync(async (req, res) => {
   const { bookingsId } = req.params;
-  const filter = {
-    _id: bookingsId,
-  };
-  const options = {};
-  const bookings = await bookingsService.getOne(filter, options);
-  return res.status(httpStatus.OK).send({ results: bookings });
+  const data = await bookingsService.getBookingSummaryDetails(bookingsId);
+  return res.status(httpStatus.OK).send({ results: data });
 });
 
 export const listBookings = catchAsync(async (req, res) => {
