@@ -21,3 +21,4 @@ coverage
 .mochaTestCaseForApp.js
 .serverForTestingApi.js
 scratch/
+*.postman_collection.json
