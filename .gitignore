@@ -22,3 +22,4 @@ coverage
 .serverForTestingApi.js
 scratch/
 *.postman_collection.json
+REACT_NATIVE_ADDRESS_PICKER_GUIDE.md
