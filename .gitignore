@@ -20,3 +20,4 @@ coverage
 # ignore test case file of mocha
 .mochaTestCaseForApp.js
 .serverForTestingApi.js
+scratch/

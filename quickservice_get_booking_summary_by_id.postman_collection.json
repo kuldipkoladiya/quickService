@@ -1,0 +1,42 @@
+{
+	"info": {
+		"_postman_id": "7b8a9c0d-1e2f-4a3b-8c9d-0e1f2a3b4c5d",
+		"name": "QuickService - Get Booking Summary API",
+		"description": "API to fetch full booking summary details matching the UI Booking Summary screen (Vendor details, appointment schedule, confirmed address, and full price breakdown with commission / service fee & taxes).",
+		"schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+	},
+	"item": [
+		{
+			"name": "Get Booking Summary by ID (Customer)",
+			"request": {
+				"method": "GET",
+				"header": [
+					{
+						"key": "Authorization",
+						"value": "Bearer {{token}}"
+					}
+				],
+				"url": {
+					"raw": "{{base_url}}/v1/customer/bookings/:bookingsId",
+					"host": [
+						"{{base_url}}"
+					],
+					"path": [
+						"v1",
+						"customer",
+						"bookings",
+						":bookingsId"
+					],
+					"variable": [
+						{
+							"key": "bookingsId",
+							"value": "9F8A2D3C",
+							"description": "Unique 8-character bookingId (e.g. 9F8A2D3C) or MongoDB ObjectId"
+						}
+					]
+				}
+			},
+			"response": []
+		}
+	]
+}

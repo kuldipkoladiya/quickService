@@ -1,0 +1,33 @@
+{
+	"info": {
+		"_postman_id": "c1f7a2d8-9b3e-461d-8f2c-7389a0b12c85",
+		"name": "QuickService - Get Categories (Customer)",
+		"schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+	},
+	"item": [
+		{
+			"name": "Get Categories (Customer)",
+			"request": {
+				"method": "GET",
+				"header": [
+					{
+						"key": "Authorization",
+						"value": "Bearer {{customer_token}}"
+					}
+				],
+				"url": {
+					"raw": "{{base_url}}/v1/customer/categories",
+					"host": [
+						"{{base_url}}"
+					],
+					"path": [
+						"v1",
+						"customer",
+						"categories"
+					]
+				}
+			},
+			"response": []
+		}
+	]
+}

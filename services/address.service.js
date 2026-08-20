@@ -29,6 +29,26 @@ export async function createAddress(body = {}) {
       throw new ApiError(httpStatus.BAD_REQUEST, 'field userId is not valid');
     }
   }
+
+  // Handle coordinates & GeoJSON location
+  if (body.latitude !== undefined && body.longitude !== undefined) {
+    const lat = Number(body.latitude);
+    const lng = Number(body.longitude);
+    body.latitude = lat;
+    body.longitude = lng;
+    body.location = {
+      type: 'Point',
+      coordinates: [lng, lat],
+    };
+  } else if (body.location && Array.isArray(body.location.coordinates) && body.location.coordinates.length === 2) {
+    // eslint-disable-next-line no-param-reassign
+    body.location.type = 'Point';
+    // eslint-disable-next-line no-param-reassign
+    body.longitude = body.location.coordinates[0];
+    // eslint-disable-next-line no-param-reassign
+    body.latitude = body.location.coordinates[1];
+  }
+
   const isDefaultBool = body.isDefault === true || body.isDefault === 'true';
   if (isDefaultBool) {
     // eslint-disable-next-line no-param-reassign
@@ -51,6 +71,23 @@ export async function updateAddress(filter, body, options = {}) {
       throw new ApiError(httpStatus.BAD_REQUEST, 'field userId is not valid');
     }
   }
+
+  // Handle coordinates & GeoJSON location
+  if (body.latitude !== undefined && body.longitude !== undefined) {
+    const lat = Number(body.latitude);
+    const lng = Number(body.longitude);
+    body.latitude = lat;
+    body.longitude = lng;
+    body.location = {
+      type: 'Point',
+      coordinates: [lng, lat],
+    };
+  } else if (body.location && Array.isArray(body.location.coordinates) && body.location.coordinates.length === 2) {
+    body.location.type = 'Point';
+    body.longitude = body.location.coordinates[0];
+    body.latitude = body.location.coordinates[1];
+  }
+
   const isDefaultBool = body.isDefault === true || body.isDefault === 'true';
   if (isDefaultBool) {
     // eslint-disable-next-line no-param-reassign

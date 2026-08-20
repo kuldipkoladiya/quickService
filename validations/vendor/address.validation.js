@@ -11,7 +11,11 @@ export const createAddress = {
   body: Joi.object().keys({
     address: Joi.string(),
     userId: Joi.objectId().required(),
+    houseNumber: Joi.string().allow('', null).optional(),
     floor: Joi.string().allow('', null).optional(),
+    city: Joi.string().allow('', null).optional(),
+    state: Joi.string().allow('', null).optional(),
+    pinCode: Joi.string().allow('', null).optional(),
     locationType: Joi.string()
       .valid(...Object.values(enumFields.EnumLocationTypeOfAddress))
       .optional(),
@@ -19,7 +23,17 @@ export const createAddress = {
     receiverName: Joi.string().allow('', null).optional(),
     receiverMobile: Joi.number().integer().allow('', null).optional(),
     isDefault: Joi.bool().optional(),
-    location: Joi.string().allow('', null).optional(),
+    latitude: Joi.number().min(-90).max(90).optional(),
+    longitude: Joi.number().min(-180).max(180).optional(),
+    location: Joi.alternatives()
+      .try(
+        Joi.object({
+          type: Joi.string().valid('Point').default('Point'),
+          coordinates: Joi.array().items(Joi.number()).length(2).required(),
+        }),
+        Joi.string().allow('', null)
+      )
+      .optional(),
   }),
 };
 
@@ -27,7 +41,11 @@ export const updateAddress = {
   body: Joi.object().keys({
     address: Joi.string().optional(),
     userId: Joi.objectId().optional(),
+    houseNumber: Joi.string().allow('', null).optional(),
     floor: Joi.string().allow('', null).optional(),
+    city: Joi.string().allow('', null).optional(),
+    state: Joi.string().allow('', null).optional(),
+    pinCode: Joi.string().allow('', null).optional(),
     locationType: Joi.string()
       .valid(...Object.values(enumFields.EnumLocationTypeOfAddress))
       .optional(),
@@ -35,7 +53,17 @@ export const updateAddress = {
     receiverName: Joi.string().allow('', null).optional(),
     receiverMobile: Joi.number().integer().allow('', null).optional(),
     isDefault: Joi.bool().optional(),
-    location: Joi.string().allow('', null).optional(),
+    latitude: Joi.number().min(-90).max(90).optional(),
+    longitude: Joi.number().min(-180).max(180).optional(),
+    location: Joi.alternatives()
+      .try(
+        Joi.object({
+          type: Joi.string().valid('Point').default('Point'),
+          coordinates: Joi.array().items(Joi.number()).length(2).required(),
+        }),
+        Joi.string().allow('', null)
+      )
+      .optional(),
   }),
   params: Joi.object().keys({
     addressId: Joi.objectId().required(),

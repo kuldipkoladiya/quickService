@@ -30,6 +30,18 @@ const AddressSchema = new mongoose.Schema(
     floor: {
       type: String,
     },
+    houseNumber: {
+      type: String,
+    },
+    city: {
+      type: String,
+    },
+    state: {
+      type: String,
+    },
+    pinCode: {
+      type: String,
+    },
     locationType: {
       type: String,
       enum: Object.values(enumModel.EnumLocationTypeOfAddress),
@@ -47,12 +59,26 @@ const AddressSchema = new mongoose.Schema(
       type: Boolean,
       default: false,
     },
+    latitude: {
+      type: Number,
+    },
+    longitude: {
+      type: Number,
+    },
     location: {
-      type: String,
+      type: {
+        type: String,
+        enum: ['Point'],
+        default: 'Point',
+      },
+      coordinates: {
+        type: [Number],
+      },
     },
   },
   { timestamps: { createdAt: true, updatedAt: true } }
 );
+AddressSchema.index({ location: '2dsphere' });
 AddressSchema.plugin(toJSON);
 AddressSchema.plugin(mongoosePaginateV2);
 AddressSchema.plugin(softDelete, {

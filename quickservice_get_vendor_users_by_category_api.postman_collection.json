@@ -1,0 +1,55 @@
+{
+	"info": {
+		"_postman_id": "78e0ea52-8c90-4bf6-90bf-2f88bfa17db2",
+		"name": "QuickService - Get Vendor Users By Category",
+		"schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+	},
+	"item": [
+		{
+			"name": "Get Vendor Users By Category (Within 5km)",
+			"request": {
+				"method": "GET",
+				"header": [
+					{
+						"key": "Authorization",
+						"value": "Bearer {{token}}"
+					}
+				],
+				"url": {
+					"raw": "{{base_url}}/v1/customer/vendorUser/category/{{categoryId}}?latitude=21.221004343343655&longitude=72.88664942728386",
+					"host": [
+						"{{base_url}}"
+					],
+					"path": [
+						"v1",
+						"customer",
+						"vendorUser",
+						"category",
+						"{{categoryId}}"
+					],
+					"query": [
+						{
+							"key": "latitude",
+							"value": "21.221004343343655"
+						},
+						{
+							"key": "longitude",
+							"value": "72.88664942728386"
+						},
+						{
+							"key": "page",
+							"value": "1",
+							"disabled": true
+						},
+						{
+							"key": "limit",
+							"value": "10",
+							"disabled": true
+						}
+					]
+				}
+			},
+			"response": []
+		}
+	]
+}

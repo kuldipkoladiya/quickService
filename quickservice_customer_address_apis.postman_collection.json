@@ -1,0 +1,200 @@
+{
+	"info": {
+		"_postman_id": "9a8b7c6d-5e4f-3a2b-1c0d-e9f8a7b6c5d4",
+		"name": "QuickService - Customer Address APIs",
+		"description": "APIs to manage customer addresses including getting address list by userId or for the authenticated user.",
+		"schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+	},
+	"item": [
+		{
+			"name": "Get Address List by User ID",
+			"request": {
+				"method": "GET",
+				"header": [
+					{
+						"key": "Authorization",
+						"value": "Bearer {{token}}"
+					}
+				],
+				"url": {
+					"raw": "{{base_url}}/v1/customer/address/user/:userId",
+					"host": [
+						"{{base_url}}"
+					],
+					"path": [
+						"v1",
+						"customer",
+						"address",
+						"user",
+						":userId"
+					],
+					"variable": [
+						{
+							"key": "userId",
+							"value": "6a70376b304b3286b0534645",
+							"description": "Customer User ID"
+						}
+					]
+				}
+			},
+			"response": []
+		},
+		{
+			"name": "Get My Address List (Authenticated Customer)",
+			"request": {
+				"method": "GET",
+				"header": [
+					{
+						"key": "Authorization",
+						"value": "Bearer {{token}}"
+					}
+				],
+				"url": {
+					"raw": "{{base_url}}/v1/customer/address",
+					"host": [
+						"{{base_url}}"
+					],
+					"path": [
+						"v1",
+						"customer",
+						"address"
+					]
+				}
+			},
+			"response": []
+		},
+		{
+			"name": "Create Address",
+			"request": {
+				"method": "POST",
+				"header": [
+					{
+						"key": "Content-Type",
+						"value": "application/json"
+					},
+					{
+						"key": "Authorization",
+						"value": "Bearer {{token}}"
+					}
+				],
+				"body": {
+					"mode": "raw",
+					"raw": "{\n    \"address\": \"Shop 12, Phoenix Palladium, Lower Parel, Mumbai, Maharashtra 400013\",\n    \"houseNumber\": \"Flat 502, Tower B\",\n    \"floor\": \"5th Floor\",\n    \"city\": \"Mumbai\",\n    \"state\": \"Maharashtra\",\n    \"pinCode\": \"400013\",\n    \"locationType\": \"HOME\",\n    \"landmark\": \"Near Palladium Mall\",\n    \"receiverName\": \"John Doe\",\n    \"receiverMobile\": 9876543210,\n    \"isDefault\": true,\n    \"latitude\": 18.9930,\n    \"longitude\": 72.8258,\n    \"location\": {\n        \"type\": \"Point\",\n        \"coordinates\": [72.8258, 18.9930]\n    }\n}"
+				},
+				"url": {
+					"raw": "{{base_url}}/v1/customer/address",
+					"host": [
+						"{{base_url}}"
+					],
+					"path": [
+						"v1",
+						"customer",
+						"address"
+					]
+				}
+			},
+			"response": []
+		},
+		{
+			"name": "Get Address by Address ID",
+			"request": {
+				"method": "GET",
+				"header": [
+					{
+						"key": "Authorization",
+						"value": "Bearer {{token}}"
+					}
+				],
+				"url": {
+					"raw": "{{base_url}}/v1/customer/address/:addressId",
+					"host": [
+						"{{base_url}}"
+					],
+					"path": [
+						"v1",
+						"customer",
+						"address",
+						":addressId"
+					],
+					"variable": [
+						{
+							"key": "addressId",
+							"value": "6a7c09c598d90a2bec7c8c19"
+						}
+					]
+				}
+			},
+			"response": []
+		},
+		{
+			"name": "Update Address",
+			"request": {
+				"method": "PUT",
+				"header": [
+					{
+						"key": "Content-Type",
+						"value": "application/json"
+					},
+					{
+						"key": "Authorization",
+						"value": "Bearer {{token}}"
+					}
+				],
+				"body": {
+					"mode": "raw",
+					"raw": "{\n    \"address\": \"Shop 12, Phoenix Palladium, Lower Parel, Mumbai, Maharashtra 400013\",\n    \"houseNumber\": \"Flat 502, Tower B\",\n    \"floor\": \"5th Floor\",\n    \"city\": \"Mumbai\",\n    \"state\": \"Maharashtra\",\n    \"pinCode\": \"400013\",\n    \"locationType\": \"WORK\",\n    \"landmark\": \"Near Metro Station\",\n    \"receiverName\": \"John Doe\",\n    \"receiverMobile\": 9876543210,\n    \"isDefault\": true,\n    \"latitude\": 18.9930,\n    \"longitude\": 72.8258,\n    \"location\": {\n        \"type\": \"Point\",\n        \"coordinates\": [72.8258, 18.9930]\n    }\n}"
+				},
+				"url": {
+					"raw": "{{base_url}}/v1/customer/address/:addressId",
+					"host": [
+						"{{base_url}}"
+					],
+					"path": [
+						"v1",
+						"customer",
+						"address",
+						":addressId"
+					],
+					"variable": [
+						{
+							"key": "addressId",
+							"value": "6a7c09c598d90a2bec7c8c19"
+						}
+					]
+				}
+			},
+			"response": []
+		},
+		{
+			"name": "Delete Address",
+			"request": {
+				"method": "DELETE",
+				"header": [
+					{
+						"key": "Authorization",
+						"value": "Bearer {{token}}"
+					}
+				],
+				"url": {
+					"raw": "{{base_url}}/v1/customer/address/:addressId",
+					"host": [
+						"{{base_url}}"
+					],
+					"path": [
+						"v1",
+						"customer",
+						"address",
+						":addressId"
+					],
+					"variable": [
+						{
+							"key": "addressId",
+							"value": "6a7c09c598d90a2bec7c8c19"
+						}
+					]
+				}
+			},
+			"response": []
+		}
+	]
+}
