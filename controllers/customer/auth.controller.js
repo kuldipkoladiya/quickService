@@ -238,7 +238,11 @@ export const login = catchAsync(async (req, res) => {
   if (vendorUser) {
     userJson.vendorUser = vendorUser;
   }
-  const addresses = await addressService.getAddressList({ userId: user._id, isDeleted: { $ne: true } });
+  const addresses = await addressService.getAddressList({
+    userId: user._id,
+    isDeleted: { $ne: true },
+    locationType: { $ne: 'unlabeled' },
+  });
   userJson.addresses = addresses || [];
 
   res.status(httpStatus.OK).send({
@@ -312,7 +316,11 @@ export const verifyOtpCustomer = catchAsync(async (req, res) => {
     updatedUser = await userService.addDeviceToken(user, req.body);
   }
 
-  const addresses = await addressService.getAddressList({ userId: user._id, isDeleted: { $ne: true } });
+  const addresses = await addressService.getAddressList({
+    userId: user._id,
+    isDeleted: { $ne: true },
+    locationType: { $ne: 'unlabeled' },
+  });
 
   return res.status(httpStatus.OK).send({
     results: {
@@ -389,7 +397,11 @@ export const resetPasswordToken = catchAsync(async (req, res) => {
 
 export const userInfo = catchAsync(async (req, res) => {
   const user = await userService.getUserById(req.user._id);
-  const addresses = await addressService.getAddressList({ userId: req.user._id, isDeleted: { $ne: true } });
+  const addresses = await addressService.getAddressList({
+    userId: req.user._id,
+    isDeleted: { $ne: true },
+    locationType: { $ne: 'unlabeled' },
+  });
   const userJson = user.toJSON ? user.toJSON() : user;
   userJson.addresses = addresses || [];
   res.status(httpStatus.OK).send({ results: { user: userJson } });
@@ -518,7 +530,11 @@ export const logout = catchAsync(async (req, res) => {
 export const socialLogin = catchAsync(async (req, res) => {
   const user = await authService.socialLogin(req.user);
   const token = await tokenService.generateAuthTokens(req.user);
-  const addresses = await addressService.getAddressList({ userId: req.user._id, isDeleted: { $ne: true } });
+  const addresses = await addressService.getAddressList({
+    userId: req.user._id,
+    isDeleted: { $ne: true },
+    locationType: { $ne: 'unlabeled' },
+  });
   const userJson = user.toJSON ? user.toJSON() : user;
   userJson.addresses = addresses || [];
   res.status(httpStatus.OK).send({ results: { user: userJson, token } });

@@ -23,6 +23,7 @@ const EnumLocationTypeOfAddress = {
   WORK: 'work',
   HOTEL: 'hotel',
   OTHER: 'other',
+  UNLABELED: 'unlabeled',
 };
 const EnumAccountTypeOfBank = {
   SAVING: 'saving',

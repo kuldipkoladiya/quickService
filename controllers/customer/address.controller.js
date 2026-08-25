@@ -11,6 +11,7 @@ export const getAddress = catchAsync(async (req, res) => {
   const filter = {
     _id: addressId,
     userId: req.user._id,
+    locationType: { $ne: 'unlabeled' },
   };
   const options = {};
   const address = await addressService.getOne(filter, options);
@@ -22,6 +23,7 @@ export const listAddress = catchAsync(async (req, res) => {
   const filter = {
     userId,
     isDeleted: { $ne: true },
+    locationType: { $ne: 'unlabeled' },
   };
   const options = {};
   const address = await addressService.getAddressList(filter, options);
@@ -33,6 +35,7 @@ export const getAddressesByUserId = catchAsync(async (req, res) => {
   const filter = {
     userId: userId || req.user._id,
     isDeleted: { $ne: true },
+    locationType: { $ne: 'unlabeled' },
   };
   const options = {};
   const address = await addressService.getAddressList(filter, options);
@@ -42,6 +45,7 @@ export const getAddressesByUserId = catchAsync(async (req, res) => {
 export const paginateAddress = catchAsync(async (req, res) => {
   const filter = {
     userId: req.user._id,
+    locationType: { $ne: 'unlabeled' },
   };
   const options = {};
   const address = await addressService.getAddressListWithPagination(filter, options);
