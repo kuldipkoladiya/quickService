@@ -105,6 +105,70 @@ export async function getBookingSummaryDetails(identifier) {
     });
   }
 
+  // Get Vendor's Availability details
+  let vendorAvailability = null;
+  if (booking.vendorId) {
+    const vId = booking.vendorId._id || booking.vendorId;
+    const va = await VendorAvailability.findOne({ vendorId: vId, isDeleted: { $ne: true } });
+    if (va) {
+      const dayNames = ['sunday', 'monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday'];
+      const todayDayName = dayNames[new Date().getDay()];
+
+      const isOnline = va.isOnline !== undefined ? Boolean(va.isOnline) : true;
+      const storeStatus = va.storeStatus || (isOnline ? 'online' : 'offline');
+      const vendorBookingOption = va.bookingOption || 'instant';
+      const instantArrivalEstimate = va.instantArrivalEstimate || '30-40 mins';
+
+      let isOpenToday = true;
+      if (va.weeklySchedule && Array.isArray(va.weeklySchedule)) {
+        const todaySchedule = va.weeklySchedule.find((s) => s.day && s.day.toLowerCase() === todayDayName);
+        if (todaySchedule) {
+          isOpenToday = Boolean(todaySchedule.isOpen);
+        }
+      }
+
+      const isAvailable = isOnline && isOpenToday;
+
+      let statusText = 'Available';
+      let statusBadge = 'available';
+
+      if (!isOnline) {
+        statusText = 'Currently Unavailable';
+        statusBadge = 'offline';
+      } else if (!isOpenToday) {
+        statusText = 'Closed Today';
+        statusBadge = 'closed';
+      } else if (vendorBookingOption === 'instant') {
+        statusText = `Arriving in ${instantArrivalEstimate}`;
+        statusBadge = 'instant';
+      } else {
+        statusText = 'Open for Schedule';
+        statusBadge = 'schedule';
+      }
+
+      vendorAvailability = {
+        isOnline,
+        storeStatus,
+        isOpenToday,
+        isAvailable,
+        statusText,
+        statusBadge,
+        bookingOption: vendorBookingOption,
+        instantArrivalEstimate,
+      };
+
+      // Only include day-wise open & close weeklySchedule if bookingOption is schedule
+      const effectiveBookingOption = booking.bookingType || vendorBookingOption;
+      if (
+        effectiveBookingOption === 'schedule' ||
+        effectiveBookingOption === 'SCHEDULE' ||
+        vendorBookingOption === 'schedule'
+      ) {
+        vendorAvailability.weeklySchedule = va.weeklySchedule || [];
+      }
+    }
+  }
+
   // Calculate distance if coordinates are available
   let distanceKm = null;
   if (
@@ -285,6 +349,13 @@ export async function getBookingSummaryDetails(identifier) {
     }
   }
 
+  if (vendorAvailability) {
+    bookingJson.vendorAvailability = vendorAvailability;
+    if (bookingJson.vendorId && typeof bookingJson.vendorId === 'object') {
+      bookingJson.vendorId.vendorAvailability = vendorAvailability;
+    }
+  }
+
   const bookingSummary = {
     bookingId: booking.bookingId,
     _id: booking._id,
@@ -301,8 +372,10 @@ export async function getBookingSummaryDetails(identifier) {
       profileImage: vendorProfilePic,
       category: vendorUserObj.categoryId ? vendorUserObj.categoryId.name || vendorUserObj.categoryId.title : null,
       businessAddress: vendorBusinessAddress,
+      vendorAvailability,
     },
     businessAddress: vendorBusinessAddress,
+    vendorAvailability,
     appointment: {
       bookingType: booking.bookingType || 'schedule',
       bookingDate: booking.bookingDate,
@@ -343,6 +416,7 @@ export async function getBookingSummaryDetails(identifier) {
     booking: bookingJson,
     bookingSummary,
     businessAddress: vendorBusinessAddress,
+    vendorAvailability,
   };
 }
 
@@ -390,6 +464,68 @@ export async function getOne(query, options = {}) {
     });
   }
 
+  let vendorAvailability = null;
+  if (booking.vendorId) {
+    const vId = booking.vendorId._id || booking.vendorId;
+    const va = await VendorAvailability.findOne({ vendorId: vId, isDeleted: { $ne: true } });
+    if (va) {
+      const dayNames = ['sunday', 'monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday'];
+      const todayDayName = dayNames[new Date().getDay()];
+
+      const isOnline = va.isOnline !== undefined ? Boolean(va.isOnline) : true;
+      const storeStatus = va.storeStatus || (isOnline ? 'online' : 'offline');
+      const vendorBookingOption = va.bookingOption || 'instant';
+      const instantArrivalEstimate = va.instantArrivalEstimate || '30-40 mins';
+
+      let isOpenToday = true;
+      if (va.weeklySchedule && Array.isArray(va.weeklySchedule)) {
+        const todaySchedule = va.weeklySchedule.find((s) => s.day && s.day.toLowerCase() === todayDayName);
+        if (todaySchedule) {
+          isOpenToday = Boolean(todaySchedule.isOpen);
+        }
+      }
+
+      const isAvailable = isOnline && isOpenToday;
+
+      let statusText = 'Available';
+      let statusBadge = 'available';
+
+      if (!isOnline) {
+        statusText = 'Currently Unavailable';
+        statusBadge = 'offline';
+      } else if (!isOpenToday) {
+        statusText = 'Closed Today';
+        statusBadge = 'closed';
+      } else if (vendorBookingOption === 'instant') {
+        statusText = `Arriving in ${instantArrivalEstimate}`;
+        statusBadge = 'instant';
+      } else {
+        statusText = 'Open for Schedule';
+        statusBadge = 'schedule';
+      }
+
+      vendorAvailability = {
+        isOnline,
+        storeStatus,
+        isOpenToday,
+        isAvailable,
+        statusText,
+        statusBadge,
+        bookingOption: vendorBookingOption,
+        instantArrivalEstimate,
+      };
+
+      const currentBookingType = booking.bookingType || vendorBookingOption;
+      if (
+        currentBookingType === 'schedule' ||
+        currentBookingType === 'SCHEDULE' ||
+        vendorBookingOption === 'schedule'
+      ) {
+        vendorAvailability.weeklySchedule = va.weeklySchedule || [];
+      }
+    }
+  }
+
   let bookingJson = booking;
   if (typeof booking.toJSON === 'function') {
     bookingJson = booking.toJSON();
@@ -403,6 +539,13 @@ export async function getOne(query, options = {}) {
     bookingJson.businessAddress = vendorBusinessAddress;
     if (bookingJson.vendorId && typeof bookingJson.vendorId === 'object') {
       bookingJson.vendorId.businessAddress = vendorBusinessAddress;
+    }
+  }
+
+  if (vendorAvailability) {
+    bookingJson.vendorAvailability = vendorAvailability;
+    if (bookingJson.vendorId && typeof bookingJson.vendorId === 'object') {
+      bookingJson.vendorId.vendorAvailability = vendorAvailability;
     }
   }
 
