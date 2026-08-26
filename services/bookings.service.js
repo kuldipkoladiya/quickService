@@ -90,9 +90,17 @@ export async function getBookingSummaryDetails(identifier) {
   // Get Vendor's business address
   let vendorBusinessAddress = null;
   if (booking.vendorId) {
-    const vendorUserId = (booking.vendorId.userId && booking.vendorId.userId._id) || booking.vendorId.userId;
+    let vendorUserId = (booking.vendorId.userId && booking.vendorId.userId._id) || booking.vendorId.userId;
+    if (!vendorUserId && typeof booking.vendorId === 'string') {
+      // eslint-disable-next-line no-await-in-loop
+      const vendorDoc = await VendorUser.findById(booking.vendorId);
+      if (vendorDoc) {
+        vendorUserId = vendorDoc.userId;
+      }
+    }
+    const possibleUserIds = [vendorUserId, vendorUserObj._id, vendorUserAccount._id].filter(Boolean);
     vendorBusinessAddress = await BusinessAddress.findOne({
-      userId: vendorUserId,
+      $or: [{ userId: { $in: possibleUserIds } }, { createdBy: { $in: possibleUserIds } }],
       isDeleted: { $ne: true },
     });
   }
@@ -261,6 +269,22 @@ export async function getBookingSummaryDetails(identifier) {
       }${addressObj.location ? `, ${addressObj.location}` : ''}`
     : '12-02, Star Building, Sector 4C, Gandhinagar';
 
+  let bookingJson = booking;
+  if (typeof booking.toJSON === 'function') {
+    bookingJson = booking.toJSON();
+  } else if (typeof booking.toObject === 'function') {
+    bookingJson = booking.toObject();
+  } else {
+    bookingJson = { ...booking };
+  }
+
+  if (vendorBusinessAddress) {
+    bookingJson.businessAddress = vendorBusinessAddress;
+    if (bookingJson.vendorId && typeof bookingJson.vendorId === 'object') {
+      bookingJson.vendorId.businessAddress = vendorBusinessAddress;
+    }
+  }
+
   const bookingSummary = {
     bookingId: booking.bookingId,
     _id: booking._id,
@@ -278,6 +302,7 @@ export async function getBookingSummaryDetails(identifier) {
       category: vendorUserObj.categoryId ? vendorUserObj.categoryId.name || vendorUserObj.categoryId.title : null,
       businessAddress: vendorBusinessAddress,
     },
+    businessAddress: vendorBusinessAddress,
     appointment: {
       bookingType: booking.bookingType || 'schedule',
       bookingDate: booking.bookingDate,
@@ -315,14 +340,73 @@ export async function getBookingSummaryDetails(identifier) {
   };
 
   return {
-    booking: booking.toJSON ? booking.toJSON() : booking,
+    booking: bookingJson,
     bookingSummary,
+    businessAddress: vendorBusinessAddress,
   };
 }
 
 export async function getOne(query, options = {}) {
-  const bookings = await Bookings.findOne(query, options.projection, options);
-  return bookings;
+  let bookingQuery = Bookings.findOne(query, options.projection, options);
+  if (!options.populate) {
+    bookingQuery = bookingQuery
+      .populate({
+        path: 'vendorId',
+        populate: [
+          {
+            path: 'userId',
+            select: 'name fullName email mobileNumber profileImage profilePic userProfilePic location images',
+          },
+          { path: 'categoryId', select: 'name title image' },
+        ],
+      })
+      .populate('customerId', 'name fullName email mobileNumber profileImage profilePic userProfilePic')
+      .populate('addressId')
+      .populate('vendorServiceId')
+      .populate('serviceIds');
+  }
+  const booking = await bookingQuery;
+  if (!booking) {
+    return booking;
+  }
+
+  let vendorBusinessAddress = null;
+  if (booking.vendorId) {
+    let vendorUserId = (booking.vendorId.userId && booking.vendorId.userId._id) || booking.vendorId.userId;
+    if (!vendorUserId && typeof booking.vendorId === 'string') {
+      const vendorDoc = await VendorUser.findById(booking.vendorId);
+      if (vendorDoc) {
+        vendorUserId = vendorDoc.userId;
+      }
+    }
+    const possibleUserIds = [
+      vendorUserId,
+      booking.vendorId._id || booking.vendorId,
+      booking.vendorId.userId && (booking.vendorId.userId._id || booking.vendorId.userId),
+    ].filter(Boolean);
+    vendorBusinessAddress = await BusinessAddress.findOne({
+      $or: [{ userId: { $in: possibleUserIds } }, { createdBy: { $in: possibleUserIds } }],
+      isDeleted: { $ne: true },
+    });
+  }
+
+  let bookingJson = booking;
+  if (typeof booking.toJSON === 'function') {
+    bookingJson = booking.toJSON();
+  } else if (typeof booking.toObject === 'function') {
+    bookingJson = booking.toObject();
+  } else {
+    bookingJson = { ...booking };
+  }
+
+  if (vendorBusinessAddress) {
+    bookingJson.businessAddress = vendorBusinessAddress;
+    if (bookingJson.vendorId && typeof bookingJson.vendorId === 'object') {
+      bookingJson.vendorId.businessAddress = vendorBusinessAddress;
+    }
+  }
+
+  return bookingJson;
 }
 
 export async function getBookingsList(filter, options = {}) {
