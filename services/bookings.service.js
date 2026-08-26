@@ -356,6 +356,36 @@ export async function getBookingSummaryDetails(identifier) {
     }
   }
 
+  // Attach price, pricingType, and vendorServiceId directly to serviceIds items if available
+  if (bookingJson.serviceIds && Array.isArray(bookingJson.serviceIds)) {
+    const vsMapByServiceId = new Map();
+    // eslint-disable-next-line no-restricted-syntax
+    for (const vs of vendorServicesList) {
+      if (vs.serviceId) {
+        const sIdStr = vs.serviceId._id ? vs.serviceId._id.toString() : vs.serviceId.toString();
+        vsMapByServiceId.set(sIdStr, vs);
+      }
+    }
+    bookingJson.serviceIds = bookingJson.serviceIds.map((s) => {
+      const sObj = typeof s === 'object' && s !== null ? (s.toJSON ? s.toJSON() : { ...s }) : { _id: s };
+      const sIdStr = sObj._id ? sObj._id.toString() : sObj.toString();
+      const matchedVs = vsMapByServiceId.get(sIdStr);
+
+      if (matchedVs) {
+        if (sObj.price === undefined || sObj.price === null) {
+          sObj.price = matchedVs.price !== undefined && matchedVs.price !== null ? matchedVs.price : 0;
+        }
+        if (!sObj.pricingType) {
+          sObj.pricingType = matchedVs.pricingType || 'fixed';
+        }
+        if (!sObj.vendorServiceId) {
+          sObj.vendorServiceId = matchedVs._id;
+        }
+      }
+      return sObj;
+    });
+  }
+
   const bookingSummary = {
     bookingId: booking.bookingId,
     _id: booking._id,
@@ -546,6 +576,45 @@ export async function getOne(query, options = {}) {
     bookingJson.vendorAvailability = vendorAvailability;
     if (bookingJson.vendorId && typeof bookingJson.vendorId === 'object') {
       bookingJson.vendorId.vendorAvailability = vendorAvailability;
+    }
+  }
+
+  // Attach price, pricingType, and vendorServiceId to serviceIds items in getOne
+  if (booking.vendorId && booking.serviceIds && Array.isArray(booking.serviceIds) && booking.serviceIds.length > 0) {
+    const sIds = booking.serviceIds.map((s) => (s._id ? s._id : s));
+    const vId = booking.vendorId._id || booking.vendorId;
+    const vendorServicesList = await VendorService.find({
+      vendorId: vId,
+      serviceId: { $in: sIds },
+      isDeleted: { $ne: true },
+    });
+    const vsMapByServiceId = new Map();
+    // eslint-disable-next-line no-restricted-syntax
+    for (const vs of vendorServicesList) {
+      if (vs.serviceId) {
+        const sIdStr = vs.serviceId._id ? vs.serviceId._id.toString() : vs.serviceId.toString();
+        vsMapByServiceId.set(sIdStr, vs);
+      }
+    }
+    if (bookingJson.serviceIds && Array.isArray(bookingJson.serviceIds)) {
+      bookingJson.serviceIds = bookingJson.serviceIds.map((s) => {
+        const sObj = typeof s === 'object' && s !== null ? (s.toJSON ? s.toJSON() : { ...s }) : { _id: s };
+        const sIdStr = sObj._id ? sObj._id.toString() : sObj.toString();
+        const matchedVs = vsMapByServiceId.get(sIdStr);
+
+        if (matchedVs) {
+          if (sObj.price === undefined || sObj.price === null) {
+            sObj.price = matchedVs.price !== undefined && matchedVs.price !== null ? matchedVs.price : 0;
+          }
+          if (!sObj.pricingType) {
+            sObj.pricingType = matchedVs.pricingType || 'fixed';
+          }
+          if (!sObj.vendorServiceId) {
+            sObj.vendorServiceId = matchedVs._id;
+          }
+        }
+        return sObj;
+      });
     }
   }
 
