@@ -199,8 +199,21 @@ export function enrichBookingWithDetails(booking) {
 
   // Address ID only from real populated database object (null if no DB address)
   const populatedAddress = typeof address === 'object' && address !== null && address._id ? address : b.addressId || null;
-  const timeSlot = b.timeSlot || b.bookingTime || (b.createdAt ? formatTime(b.createdAt) : formatTime(new Date()));
-  const bookingDate = b.bookingDate || b.createdAt || null;
+  let bookingDate = b.bookingDate || b.date || b.serviceDate || b.appointmentDate || b.createdAt;
+  if (!bookingDate && b._id) {
+    try {
+      const idStr = b._id.toString();
+      if (mongoose.Types.ObjectId.isValid(idStr)) {
+        bookingDate = new mongoose.Types.ObjectId(idStr).getTimestamp();
+      }
+    } catch (e) {
+      bookingDate = new Date();
+    }
+  }
+  if (!bookingDate) {
+    bookingDate = new Date();
+  }
+  const timeSlot = b.timeSlot || b.bookingTime || formatTime(bookingDate);
 
   return {
     customerName,
