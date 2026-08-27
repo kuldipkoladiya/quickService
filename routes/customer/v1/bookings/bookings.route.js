@@ -22,6 +22,12 @@ router
    * */
   .get(auth('customer'), validate(bookingsValidation.paginatedBookings), bookingsController.paginateBookings);
 router
+  .route('/customer/:customerId')
+  /**
+   * getBookingsByCustomerId
+   * */
+  .get(auth('customer'), validate(bookingsValidation.getBookingsByCustomerId), bookingsController.getBookingsByCustomerId);
+router
   .route('/:bookingsId')
   /**
    * getBookingsById

@@ -89,8 +89,16 @@ export const getBookings = {
   body: Joi.object().keys({}).unknown(true),
   query: Joi.object()
     .keys({
-      page: Joi.number(),
-      limit: Joi.number(),
+      customerId: Joi.string().optional(),
+      vendorId: Joi.string().optional(),
+      status: Joi.string().optional(),
+      bookingType: Joi.string().optional(),
+      paymentStatus: Joi.string().optional(),
+      bookingId: Joi.string().optional(),
+      page: Joi.number().optional(),
+      limit: Joi.number().optional(),
+      sortBy: Joi.string().optional(),
+      sortOrder: Joi.string().optional(),
     })
     .unknown(true),
 };
@@ -99,8 +107,35 @@ export const paginatedBookings = {
   body: Joi.object().keys({}).unknown(true),
   query: Joi.object()
     .keys({
+      customerId: Joi.string().optional(),
+      vendorId: Joi.string().optional(),
+      status: Joi.string().optional(),
+      bookingType: Joi.string().optional(),
+      paymentStatus: Joi.string().optional(),
+      bookingId: Joi.string().optional(),
       page: Joi.number().default(1),
       limit: Joi.number().default(10).max(100),
+      sortBy: Joi.string().optional(),
+      sortOrder: Joi.string().optional(),
+    })
+    .unknown(true),
+};
+
+export const getBookingsByCustomerId = {
+  params: Joi.object().keys({
+    customerId: Joi.string().required(),
+  }),
+  query: Joi.object()
+    .keys({
+      vendorId: Joi.string().optional(),
+      status: Joi.string().optional(),
+      bookingType: Joi.string().optional(),
+      paymentStatus: Joi.string().optional(),
+      bookingId: Joi.string().optional(),
+      page: Joi.number().optional(),
+      limit: Joi.number().optional(),
+      sortBy: Joi.string().optional(),
+      sortOrder: Joi.string().optional(),
     })
     .unknown(true),
 };

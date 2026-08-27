@@ -22,6 +22,12 @@ router
    * */
   .get(auth('vendor'), validate(bookingsValidation.paginatedBookings), bookingsController.paginateBookings);
 router
+  .route('/vendor/:vendorId')
+  /**
+   * getBookingsByVendorId
+   * */
+  .get(auth('vendor'), validate(bookingsValidation.getBookingsByVendorId), bookingsController.getBookingsByVendorId);
+router
   .route('/:bookingsId')
   /**
    * getBookingsById
@@ -35,4 +41,21 @@ router
    * deleteBookingsById
    * */
   .delete(auth('vendor'), validate(bookingsValidation.deleteBookingsById), bookingsController.removeBookings);
+
+router
+  .route('/:bookingsId/accept')
+  /**
+   * acceptBooking
+   * */
+  .put(auth('vendor'), validate(bookingsValidation.acceptBooking), bookingsController.acceptBooking)
+  .post(auth('vendor'), validate(bookingsValidation.acceptBooking), bookingsController.acceptBooking);
+
+router
+  .route('/:bookingsId/cancel')
+  /**
+   * cancelBooking
+   * */
+  .put(auth('vendor'), validate(bookingsValidation.cancelBooking), bookingsController.cancelBooking)
+  .post(auth('vendor'), validate(bookingsValidation.cancelBooking), bookingsController.cancelBooking);
+
 export default router;

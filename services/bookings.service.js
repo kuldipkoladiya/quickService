@@ -367,7 +367,10 @@ export async function getBookingSummaryDetails(identifier) {
       }
     }
     bookingJson.serviceIds = bookingJson.serviceIds.map((s) => {
-      const sObj = typeof s === 'object' && s !== null ? (s.toJSON ? s.toJSON() : { ...s }) : { _id: s };
+      let sObj = { _id: s };
+      if (typeof s === 'object' && s !== null) {
+        sObj = s.toJSON ? s.toJSON() : { ...s };
+      }
       const sIdStr = sObj._id ? sObj._id.toString() : sObj.toString();
       const matchedVs = vsMapByServiceId.get(sIdStr);
 
@@ -546,11 +549,7 @@ export async function getOne(query, options = {}) {
       };
 
       const currentBookingType = booking.bookingType || vendorBookingOption;
-      if (
-        currentBookingType === 'schedule' ||
-        currentBookingType === 'SCHEDULE' ||
-        vendorBookingOption === 'schedule'
-      ) {
+      if (currentBookingType === 'schedule' || currentBookingType === 'SCHEDULE' || vendorBookingOption === 'schedule') {
         vendorAvailability.weeklySchedule = va.weeklySchedule || [];
       }
     }
@@ -598,7 +597,10 @@ export async function getOne(query, options = {}) {
     }
     if (bookingJson.serviceIds && Array.isArray(bookingJson.serviceIds)) {
       bookingJson.serviceIds = bookingJson.serviceIds.map((s) => {
-        const sObj = typeof s === 'object' && s !== null ? (s.toJSON ? s.toJSON() : { ...s }) : { _id: s };
+        let sObj = { _id: s };
+        if (typeof s === 'object' && s !== null) {
+          sObj = s.toJSON ? s.toJSON() : { ...s };
+        }
         const sIdStr = sObj._id ? sObj._id.toString() : sObj.toString();
         const matchedVs = vsMapByServiceId.get(sIdStr);
 
@@ -621,13 +623,77 @@ export async function getOne(query, options = {}) {
   return bookingJson;
 }
 
+export const defaultBookingPopulate = [
+  {
+    path: 'vendorId',
+    populate: [
+      {
+        path: 'userId',
+        select: 'name fullName email mobileNumber profileImage profilePic userProfilePic location images',
+      },
+      { path: 'categoryId', select: 'name title image' },
+    ],
+  },
+  {
+    path: 'customerId',
+    select: 'name fullName email mobileNumber profileImage profilePic userProfilePic',
+  },
+  { path: 'addressId' },
+  { path: 'vendorServiceId' },
+  { path: 'serviceIds' },
+];
+
+export function buildBookingStatusFilter(status) {
+  if (!status) return null;
+  if (Array.isArray(status)) {
+    const list = status.map((s) => (s.toLowerCase() === 'pending' ? 'panding' : s.toLowerCase()));
+    return { $in: list };
+  }
+  if (typeof status === 'string') {
+    if (status.includes(',')) {
+      const list = status.split(',').map((s) => {
+        const trimmed = s.trim().toLowerCase();
+        return trimmed === 'pending' ? 'panding' : trimmed;
+      });
+      return { $in: list };
+    }
+    const normalized = status.trim().toLowerCase() === 'pending' ? 'panding' : status.trim().toLowerCase();
+    return normalized;
+  }
+  return status;
+}
+
 export async function getBookingsList(filter, options = {}) {
-  const bookings = await Bookings.find(filter, options.projection, options);
+  let query = Bookings.find(filter, options.projection, options);
+  if (options.populate) {
+    query = query.populate(options.populate);
+  } else {
+    query = query.populate(defaultBookingPopulate);
+  }
+  if (options.sort) {
+    query = query.sort(options.sort);
+  } else {
+    query = query.sort({ createdAt: -1 });
+  }
+  const bookings = await query;
   return bookings;
 }
 
 export async function getBookingsListWithPagination(filter, options = {}) {
-  const bookings = await Bookings.paginate(filter, options);
+  let sort = { createdAt: -1 };
+  if (options.sortBy) {
+    const sortOrder = options.sortOrder === 'asc' || options.sortOrder === 1 ? 1 : -1;
+    sort = { [options.sortBy]: sortOrder };
+  } else if (options.sort) {
+    sort = options.sort;
+  }
+
+  const paginateOptions = {
+    sort,
+    populate: defaultBookingPopulate,
+    ...options,
+  };
+  const bookings = await Bookings.paginate(filter, paginateOptions);
   return bookings;
 }
 

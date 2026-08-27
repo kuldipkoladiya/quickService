@@ -4,7 +4,9 @@
  */
 import httpStatus from 'http-status';
 import { bookingsService } from 'services';
+import { buildBookingStatusFilter } from 'services/bookings.service';
 import { catchAsync } from 'utils/catchAsync';
+import { pick } from 'utils/pick';
 
 export const getBookings = catchAsync(async (req, res) => {
   const { bookingsId } = req.params;
@@ -12,17 +14,72 @@ export const getBookings = catchAsync(async (req, res) => {
   return res.status(httpStatus.OK).send({ results: data });
 });
 
+const buildCustomerBookingFilter = (req, customerIdOverride = null) => {
+  const customerId = customerIdOverride || req.query.customerId || (req.user && req.user._id);
+  const filter = {
+    isDeleted: { $ne: true },
+  };
+
+  if (customerId) {
+    filter.customerId = customerId;
+  }
+
+  if (req.query.status) {
+    const statusFilter = buildBookingStatusFilter(req.query.status);
+    if (statusFilter) {
+      filter.status = statusFilter;
+    }
+  }
+
+  if (req.query.vendorId) {
+    filter.vendorId = req.query.vendorId;
+  }
+
+  if (req.query.bookingType) {
+    filter.bookingType = req.query.bookingType;
+  }
+
+  if (req.query.paymentStatus) {
+    filter.paymentStatus = req.query.paymentStatus;
+  }
+
+  if (req.query.bookingId) {
+    filter.bookingId = req.query.bookingId;
+  }
+
+  return filter;
+};
+
 export const listBookings = catchAsync(async (req, res) => {
-  const filter = {};
-  const options = {};
+  const filter = buildCustomerBookingFilter(req);
+  const options = pick(req.query, ['sortBy', 'sortOrder']);
   const bookings = await bookingsService.getBookingsList(filter, options);
   return res.status(httpStatus.OK).send({ results: bookings });
 });
 
 export const paginateBookings = catchAsync(async (req, res) => {
-  const filter = {};
-  const options = {};
+  const filter = buildCustomerBookingFilter(req);
+  const options = pick(req.query, ['page', 'limit', 'sortBy', 'sortOrder']);
+  if (options.page) options.page = parseInt(options.page, 10);
+  if (options.limit) options.limit = parseInt(options.limit, 10);
   const bookings = await bookingsService.getBookingsListWithPagination(filter, options);
+  return res.status(httpStatus.OK).send({ results: bookings });
+});
+
+export const getBookingsByCustomerId = catchAsync(async (req, res) => {
+  const { customerId } = req.params;
+  const filter = buildCustomerBookingFilter(req, customerId);
+
+  if (req.query.page || req.query.limit) {
+    const options = pick(req.query, ['page', 'limit', 'sortBy', 'sortOrder']);
+    if (options.page) options.page = parseInt(options.page, 10);
+    if (options.limit) options.limit = parseInt(options.limit, 10);
+    const bookings = await bookingsService.getBookingsListWithPagination(filter, options);
+    return res.status(httpStatus.OK).send({ results: bookings });
+  }
+
+  const options = pick(req.query, ['sortBy', 'sortOrder']);
+  const bookings = await bookingsService.getBookingsList(filter, options);
   return res.status(httpStatus.OK).send({ results: bookings });
 });
 

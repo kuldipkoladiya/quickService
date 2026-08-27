@@ -3,31 +3,96 @@
  * Only fields name will be overwritten, if the field name will be changed.
  */
 import httpStatus from 'http-status';
+import mongoose from 'mongoose';
+import { VendorUser, BookingTracking } from 'models';
+import { EnumStatusOfBookings } from 'models/enum.model';
 import { bookingsService } from 'services';
+import { buildBookingStatusFilter } from 'services/bookings.service';
+import ApiError from 'utils/ApiError';
 import { catchAsync } from 'utils/catchAsync';
-import { pick } from '../../utils/pick';
+import { pick } from 'utils/pick';
+
+const buildVendorBookingFilter = async (req, vendorIdOverride = null) => {
+  let vendorId = vendorIdOverride || req.query.vendorId;
+  if (!vendorId && req.user) {
+    const vendorUser = await VendorUser.findOne({ userId: req.user._id, isDeleted: { $ne: true } });
+    if (vendorUser) {
+      vendorId = vendorUser._id;
+    } else {
+      vendorId = req.user._id;
+    }
+  }
+
+  const filter = {
+    isDeleted: { $ne: true },
+  };
+
+  if (vendorId) {
+    filter.vendorId = vendorId;
+  }
+
+  if (req.query.customerId) {
+    filter.customerId = req.query.customerId;
+  }
+
+  if (req.query.status) {
+    const statusFilter = buildBookingStatusFilter(req.query.status);
+    if (statusFilter) {
+      filter.status = statusFilter;
+    }
+  }
+
+  if (req.query.bookingType) {
+    filter.bookingType = req.query.bookingType;
+  }
+
+  if (req.query.paymentStatus) {
+    filter.paymentStatus = req.query.paymentStatus;
+  }
+
+  if (req.query.bookingId) {
+    filter.bookingId = req.query.bookingId;
+  }
+
+  return filter;
+};
 
 export const getBookings = catchAsync(async (req, res) => {
   const { bookingsId } = req.params;
-  const filter = {
-    _id: bookingsId,
-  };
-  const options = {};
-  const bookings = await bookingsService.getOne(filter, options);
-  return res.status(httpStatus.OK).send({ results: bookings });
+  const data = await bookingsService.getBookingSummaryDetails(bookingsId);
+  return res.status(httpStatus.OK).send({ results: data });
 });
 
 export const listBookings = catchAsync(async (req, res) => {
-  const filter = {};
-  const options = {};
+  const filter = await buildVendorBookingFilter(req);
+  const options = pick(req.query, ['sortBy', 'sortOrder']);
   const bookings = await bookingsService.getBookingsList(filter, options);
   return res.status(httpStatus.OK).send({ results: bookings });
 });
 
 export const paginateBookings = catchAsync(async (req, res) => {
-  const filter = {};
-  const options = {};
+  const filter = await buildVendorBookingFilter(req);
+  const options = pick(req.query, ['page', 'limit', 'sortBy', 'sortOrder']);
+  if (options.page) options.page = parseInt(options.page, 10);
+  if (options.limit) options.limit = parseInt(options.limit, 10);
   const bookings = await bookingsService.getBookingsListWithPagination(filter, options);
+  return res.status(httpStatus.OK).send({ results: bookings });
+});
+
+export const getBookingsByVendorId = catchAsync(async (req, res) => {
+  const { vendorId } = req.params;
+  const filter = await buildVendorBookingFilter(req, vendorId);
+
+  if (req.query.page || req.query.limit) {
+    const options = pick(req.query, ['page', 'limit', 'sortBy', 'sortOrder']);
+    if (options.page) options.page = parseInt(options.page, 10);
+    if (options.limit) options.limit = parseInt(options.limit, 10);
+    const bookings = await bookingsService.getBookingsListWithPagination(filter, options);
+    return res.status(httpStatus.OK).send({ results: bookings });
+  }
+
+  const options = pick(req.query, ['sortBy', 'sortOrder']);
+  const bookings = await bookingsService.getBookingsList(filter, options);
   return res.status(httpStatus.OK).send({ results: bookings });
 });
 
@@ -59,4 +124,85 @@ export const removeBookings = catchAsync(async (req, res) => {
   };
   const bookings = await bookingsService.removeBookings(filter);
   return res.status(httpStatus.OK).send({ results: bookings });
+});
+
+export const acceptBooking = catchAsync(async (req, res) => {
+  const { bookingsId } = req.params;
+  const { body } = req;
+  const updateData = {
+    status: EnumStatusOfBookings.ACCEPTED,
+    updatedBy: req.user._id,
+  };
+  if (body.estimatedArrival) updateData.estimatedArrival = body.estimatedArrival;
+  if (body.bookingTime) updateData.bookingTime = body.bookingTime;
+  if (body.notes) updateData.notes = body.notes;
+
+  const filter = mongoose.Types.ObjectId.isValid(bookingsId)
+    ? { $or: [{ _id: bookingsId }, { bookingId: bookingsId }] }
+    : { bookingId: bookingsId };
+
+  const booking = await bookingsService.updateBookings(filter, updateData, { new: true });
+  if (!booking) {
+    throw new ApiError(httpStatus.NOT_FOUND, 'Booking not found');
+  }
+
+  try {
+    await BookingTracking.create({
+      bookingId: booking._id,
+      status: 'accepted',
+      note: body.notes || 'Booking accepted by vendor',
+      createdBy: req.user._id,
+      updatedBy: req.user._id,
+    });
+  } catch (err) {
+    // ignore tracking creation error
+  }
+
+  const data = await bookingsService.getBookingSummaryDetails(booking._id);
+  return res.status(httpStatus.OK).send({
+    message: 'Booking accepted successfully',
+    results: data,
+  });
+});
+
+export const cancelBooking = catchAsync(async (req, res) => {
+  const { bookingsId } = req.params;
+  const { cancelReason, notes } = req.body;
+  if (!cancelReason) {
+    throw new ApiError(httpStatus.BAD_REQUEST, 'cancelReason is required');
+  }
+
+  const updateData = {
+    status: EnumStatusOfBookings.CANCELLED,
+    cancelReason,
+    updatedBy: req.user._id,
+  };
+  if (notes) updateData.notes = notes;
+
+  const filter = mongoose.Types.ObjectId.isValid(bookingsId)
+    ? { $or: [{ _id: bookingsId }, { bookingId: bookingsId }] }
+    : { bookingId: bookingsId };
+
+  const booking = await bookingsService.updateBookings(filter, updateData, { new: true });
+  if (!booking) {
+    throw new ApiError(httpStatus.NOT_FOUND, 'Booking not found');
+  }
+
+  try {
+    await BookingTracking.create({
+      bookingId: booking._id,
+      status: 'cancelled',
+      note: cancelReason || notes || 'Booking cancelled by vendor',
+      createdBy: req.user._id,
+      updatedBy: req.user._id,
+    });
+  } catch (err) {
+    // ignore tracking creation error
+  }
+
+  const data = await bookingsService.getBookingSummaryDetails(booking._id);
+  return res.status(httpStatus.OK).send({
+    message: 'Booking cancelled successfully',
+    results: data,
+  });
 });
