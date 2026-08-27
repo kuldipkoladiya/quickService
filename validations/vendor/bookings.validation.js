@@ -156,3 +156,46 @@ export const cancelBooking = {
     })
     .unknown(true),
 };
+
+export const onTheWayBooking = {
+  params: Joi.object().keys({
+    bookingsId: Joi.string().required(),
+  }),
+  body: Joi.object()
+    .keys({
+      notes: Joi.string().optional(),
+    })
+    .unknown(true),
+};
+
+export const sendCompletionOtp = {
+  params: Joi.object().keys({
+    bookingsId: Joi.string().required(),
+  }),
+  body: Joi.object().keys({}).unknown(true),
+};
+
+export const verifyCompletionOtp = {
+  params: Joi.object().keys({
+    bookingsId: Joi.string().required(),
+  }),
+  body: Joi.object()
+    .keys({
+      otp: Joi.alternatives().try(Joi.string(), Joi.number()).required().messages({
+        'any.required': 'OTP is required to complete the booking',
+      }),
+      notes: Joi.string().optional(),
+      paymentStatus: Joi.string()
+        .valid(...Object.values(enumFields.EnumPaymentStatusOfBookings))
+        .optional(),
+      paymentMethod: Joi.string().optional(),
+    })
+    .unknown(true),
+};
+
+export const resendCompletionOtp = {
+  params: Joi.object().keys({
+    bookingsId: Joi.string().required(),
+  }),
+  body: Joi.object().keys({}).unknown(true),
+};

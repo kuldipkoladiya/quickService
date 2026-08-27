@@ -171,14 +171,64 @@ export async function getBookingSummaryDetails(identifier) {
 
   // Calculate distance if coordinates are available
   let distanceKm = null;
+  const custAddress = booking.addressId || {};
+  let cLat = null;
+  let cLon = null;
   if (
-    booking.latitude &&
-    booking.longitude &&
-    vendorUserAccount.location &&
-    Array.isArray(vendorUserAccount.location.coordinates)
+    custAddress.latitude !== undefined &&
+    custAddress.latitude !== null &&
+    custAddress.longitude !== undefined &&
+    custAddress.longitude !== null
   ) {
-    const [lon2, lat2] = vendorUserAccount.location.coordinates;
-    distanceKm = calculateDistanceInKm(booking.latitude, booking.longitude, lat2, lon2);
+    cLat = Number(custAddress.latitude);
+    cLon = Number(custAddress.longitude);
+  } else if (
+    custAddress.location &&
+    Array.isArray(custAddress.location.coordinates) &&
+    custAddress.location.coordinates.length === 2
+  ) {
+    [cLon, cLat] = custAddress.location.coordinates;
+  } else if (
+    booking.latitude !== undefined &&
+    booking.latitude !== null &&
+    booking.longitude !== undefined &&
+    booking.longitude !== null
+  ) {
+    cLat = Number(booking.latitude);
+    cLon = Number(booking.longitude);
+  }
+
+  let vLat = null;
+  let vLon = null;
+  if (
+    vendorBusinessAddress &&
+    vendorBusinessAddress.location &&
+    Array.isArray(vendorBusinessAddress.location.coordinates) &&
+    vendorBusinessAddress.location.coordinates.length === 2
+  ) {
+    [vLon, vLat] = vendorBusinessAddress.location.coordinates;
+  } else if (vendorBusinessAddress && vendorBusinessAddress.latitude && vendorBusinessAddress.longitude) {
+    vLat = Number(vendorBusinessAddress.latitude);
+    vLon = Number(vendorBusinessAddress.longitude);
+  } else if (
+    vendorUserAccount.location &&
+    Array.isArray(vendorUserAccount.location.coordinates) &&
+    vendorUserAccount.location.coordinates.length === 2
+  ) {
+    [vLon, vLat] = vendorUserAccount.location.coordinates;
+  } else if (
+    vendorUserObj.location &&
+    Array.isArray(vendorUserObj.location.coordinates) &&
+    vendorUserObj.location.coordinates.length === 2
+  ) {
+    [vLon, vLat] = vendorUserObj.location.coordinates;
+  } else if (vendorUserObj.latitude && vendorUserObj.longitude) {
+    vLat = Number(vendorUserObj.latitude);
+    vLon = Number(vendorUserObj.longitude);
+  }
+
+  if (cLat !== null && cLon !== null && vLat !== null && vLon !== null) {
+    distanceKm = calculateDistanceInKm(cLat, cLon, vLat, vLon);
   }
 
   // Find all vendor services for this vendor and selected serviceIds
@@ -389,11 +439,52 @@ export async function getBookingSummaryDetails(identifier) {
     });
   }
 
+  const customerDoc = booking.customerId || {};
+  const customerName = customerDoc.fullName || customerDoc.name || addressObj.receiverName || 'Customer';
+
+  const serviceNamesList = serviceDetails.map((s) => s.rawTitle || s.title);
+  const primaryServiceName = serviceNamesList.length > 0 ? serviceNamesList.join(', ') : 'Quick Service';
+  const distanceText = distanceKm !== null ? `${distanceKm} km` : null;
+
+  // Attach directly to bookingJson
+  bookingJson.customerName = customerName;
+  bookingJson.customer = {
+    id: customerDoc._id || booking.customerId,
+    name: customerDoc.name || customerName,
+    fullName: customerDoc.fullName || customerName,
+    mobileNumber: customerDoc.mobileNumber || addressObj.receiverMobile,
+    email: customerDoc.email,
+    profileImage: customerDoc.profileImage || customerDoc.profilePic || null,
+  };
+  bookingJson.formattedAddress = formattedCustomerAddress;
+  bookingJson.address = addressObj;
+  bookingJson.serviceName = primaryServiceName;
+  bookingJson.serviceNames = serviceNamesList;
+  bookingJson.distanceInKm = distanceKm;
+  bookingJson.distanceKm = distanceKm;
+  bookingJson.distanceText = distanceText;
+  bookingJson.distance = distanceKm;
+
   const bookingSummary = {
     bookingId: booking.bookingId,
     _id: booking._id,
     status: booking.status,
     paymentStatus: booking.paymentStatus || 'panding',
+    customerName,
+    customer: {
+      id: customerDoc._id || booking.customerId,
+      name: customerDoc.name || customerName,
+      fullName: customerDoc.fullName || customerName,
+      mobileNumber: customerDoc.mobileNumber || addressObj.receiverMobile,
+      email: customerDoc.email,
+      profileImage: customerDoc.profileImage || customerDoc.profilePic || null,
+    },
+    serviceName: primaryServiceName,
+    serviceNames: serviceNamesList,
+    distanceInKm: distanceKm,
+    distanceKm,
+    distanceText,
+    distance: distanceKm,
     vendor: {
       vendorId: vendorUserObj._id,
       businessName: vendorName,
@@ -429,6 +520,7 @@ export async function getBookingSummaryDetails(identifier) {
       location: addressObj.location,
       displayAddress: formattedCustomerAddress,
     },
+    address: formattedCustomerAddress,
     priceBreakdown: {
       services: serviceDetails,
       servicesTotal: calculatedServicesTotal,
@@ -620,7 +712,7 @@ export async function getOne(query, options = {}) {
     }
   }
 
-  return bookingJson;
+  return enrichBookingWithDetails(bookingJson);
 }
 
 export const defaultBookingPopulate = [
@@ -639,9 +731,151 @@ export const defaultBookingPopulate = [
     select: 'name fullName email mobileNumber profileImage profilePic userProfilePic',
   },
   { path: 'addressId' },
-  { path: 'vendorServiceId' },
-  { path: 'serviceIds' },
+  {
+    path: 'vendorServiceId',
+    populate: { path: 'serviceId', select: 'name title image' },
+  },
+  { path: 'serviceIds', select: 'name title image price' },
+  { path: 'serviceId', select: 'name title image' },
 ];
+
+export function enrichBookingWithDetails(booking) {
+  if (!booking) return booking;
+  let b = booking;
+  if (typeof booking.toJSON === 'function') {
+    b = booking.toJSON();
+  } else if (typeof booking.toObject === 'function') {
+    b = booking.toObject();
+  } else {
+    b = { ...booking };
+  }
+
+  const customer = b.customerId || {};
+  const address = b.addressId || {};
+  const vendorObj = b.vendorId || {};
+  const vendorUserAccount = (vendorObj && typeof vendorObj === 'object' && vendorObj.userId) || {};
+
+  // 1. Customer Name & Object
+  const customerName = customer.fullName || customer.name || address.receiverName || 'Customer';
+
+  // 2. Formatted Address
+  let formattedAddress = null;
+  if (typeof address === 'object' && address !== null && address.address) {
+    const parts = [
+      address.houseNumber,
+      address.floor,
+      address.address,
+      address.landmark,
+      address.city,
+      address.state,
+    ].filter(Boolean);
+    formattedAddress = parts.join(', ');
+    if (address.pinCode) {
+      formattedAddress += ` - ${address.pinCode}`;
+    }
+  } else if (typeof address === 'string') {
+    formattedAddress = address;
+  }
+
+  // 3. Service Name & Names List
+  const serviceNameList = [];
+  if (b.serviceIds && Array.isArray(b.serviceIds) && b.serviceIds.length > 0) {
+    // eslint-disable-next-line no-restricted-syntax
+    for (const s of b.serviceIds) {
+      if (typeof s === 'object' && s !== null) {
+        const sName = s.name || s.title;
+        if (sName && !serviceNameList.includes(sName)) {
+          serviceNameList.push(sName);
+        }
+      }
+    }
+  }
+
+  if (b.serviceId && typeof b.serviceId === 'object' && b.serviceId !== null) {
+    const sName = b.serviceId.name || b.serviceId.title;
+    if (sName && !serviceNameList.includes(sName)) {
+      serviceNameList.push(sName);
+    }
+  }
+
+  if (b.vendorServiceId && typeof b.vendorServiceId === 'object' && b.vendorServiceId !== null) {
+    const vs = b.vendorServiceId;
+    const vsName = (vs.serviceId && (vs.serviceId.name || vs.serviceId.title)) || vs.serviceName || vs.title;
+    if (vsName && !serviceNameList.includes(vsName)) {
+      serviceNameList.push(vsName);
+    }
+  }
+
+  const serviceName = serviceNameList.length > 0 ? serviceNameList.join(', ') : 'Quick Service';
+
+  // 4. Coordinates & Distance in km
+  let lat1 = null;
+  let lon1 = null;
+  if (
+    address.latitude !== undefined &&
+    address.latitude !== null &&
+    address.longitude !== undefined &&
+    address.longitude !== null
+  ) {
+    lat1 = Number(address.latitude);
+    lon1 = Number(address.longitude);
+  } else if (address.location && Array.isArray(address.location.coordinates) && address.location.coordinates.length === 2) {
+    [lon1, lat1] = address.location.coordinates;
+  } else if (b.latitude !== undefined && b.latitude !== null && b.longitude !== undefined && b.longitude !== null) {
+    lat1 = Number(b.latitude);
+    lon1 = Number(b.longitude);
+  }
+
+  let lat2 = null;
+  let lon2 = null;
+  if (
+    vendorUserAccount.location &&
+    Array.isArray(vendorUserAccount.location.coordinates) &&
+    vendorUserAccount.location.coordinates.length === 2
+  ) {
+    [lon2, lat2] = vendorUserAccount.location.coordinates;
+  } else if (
+    vendorObj.location &&
+    Array.isArray(vendorObj.location.coordinates) &&
+    vendorObj.location.coordinates.length === 2
+  ) {
+    [lon2, lat2] = vendorObj.location.coordinates;
+  } else if (
+    vendorObj.latitude !== undefined &&
+    vendorObj.latitude !== null &&
+    vendorObj.longitude !== undefined &&
+    vendorObj.longitude !== null
+  ) {
+    lat2 = Number(vendorObj.latitude);
+    lon2 = Number(vendorObj.longitude);
+  }
+
+  let distanceInKm = null;
+  if (lat1 !== null && lon1 !== null && lat2 !== null && lon2 !== null) {
+    distanceInKm = calculateDistanceInKm(lat1, lon1, lat2, lon2);
+  }
+
+  const distanceText = distanceInKm !== null ? `${distanceInKm} km` : null;
+
+  b.customerName = customerName;
+  b.customer = {
+    id: customer._id || b.customerId,
+    name: customer.name || customerName,
+    fullName: customer.fullName || customerName,
+    mobileNumber: customer.mobileNumber || address.receiverMobile,
+    email: customer.email,
+    profileImage: customer.profileImage || customer.profilePic || null,
+  };
+  b.formattedAddress = formattedAddress;
+  b.serviceName = serviceName;
+  b.serviceNames = serviceNameList;
+  b.distanceInKm = distanceInKm;
+  b.distanceKm = distanceInKm;
+  b.distanceText = distanceText;
+  b.distance = distanceInKm;
+
+  return b;
+}
 
 export function buildBookingStatusFilter(status) {
   if (!status) return null;
@@ -676,7 +910,7 @@ export async function getBookingsList(filter, options = {}) {
     query = query.sort({ createdAt: -1 });
   }
   const bookings = await query;
-  return bookings;
+  return bookings.map((b) => enrichBookingWithDetails(b));
 }
 
 export async function getBookingsListWithPagination(filter, options = {}) {
@@ -694,6 +928,9 @@ export async function getBookingsListWithPagination(filter, options = {}) {
     ...options,
   };
   const bookings = await Bookings.paginate(filter, paginateOptions);
+  if (bookings && Array.isArray(bookings.docs)) {
+    bookings.docs = bookings.docs.map((b) => enrichBookingWithDetails(b));
+  }
   return bookings;
 }
 

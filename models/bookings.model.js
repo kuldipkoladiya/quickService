@@ -113,6 +113,9 @@ const BookingsSchema = new mongoose.Schema(
     otp: {
       type: String,
     },
+    otpExpiresAt: {
+      type: Date,
+    },
     notes: {
       type: String,
     },

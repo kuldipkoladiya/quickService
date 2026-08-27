@@ -4,12 +4,14 @@
  */
 import httpStatus from 'http-status';
 import mongoose from 'mongoose';
-import { VendorUser, BookingTracking } from 'models';
+import { User, VendorUser, BookingTracking, Bookings } from 'models';
 import { EnumStatusOfBookings } from 'models/enum.model';
-import { bookingsService } from 'services';
+import { bookingsService, emailService } from 'services';
+import { sendOtpToMobile } from 'services/mobileotp.service';
 import { buildBookingStatusFilter } from 'services/bookings.service';
 import ApiError from 'utils/ApiError';
 import { catchAsync } from 'utils/catchAsync';
+import { generateOtp } from 'utils/common';
 import { pick } from 'utils/pick';
 
 const buildVendorBookingFilter = async (req, vendorIdOverride = null) => {
@@ -107,8 +109,16 @@ export const createBookings = catchAsync(async (req, res) => {
 
 export const updateBookings = catchAsync(async (req, res) => {
   const { body } = req;
-  body.updatedBy = req.user;
   const { bookingsId } = req.params;
+
+  if (body.status === EnumStatusOfBookings.COMPLETED) {
+    throw new ApiError(
+      httpStatus.BAD_REQUEST,
+      'To complete a booking, please use the OTP verification flow (POST /v1/vendor/bookings/:bookingsId/complete/send-otp and POST /v1/vendor/bookings/:bookingsId/complete/verify-otp)'
+    );
+  }
+
+  body.updatedBy = req.user;
   const filter = {
     _id: bookingsId,
   };
@@ -162,6 +172,246 @@ export const acceptBooking = catchAsync(async (req, res) => {
   return res.status(httpStatus.OK).send({
     message: 'Booking accepted successfully',
     results: data,
+  });
+});
+
+export const onTheWayBooking = catchAsync(async (req, res) => {
+  const { bookingsId } = req.params;
+  const { notes } = req.body || {};
+
+  const filter = mongoose.Types.ObjectId.isValid(bookingsId)
+    ? { $or: [{ _id: bookingsId }, { bookingId: bookingsId }] }
+    : { bookingId: bookingsId };
+
+  const updateData = {
+    status: EnumStatusOfBookings.ONTHEWAY,
+    updatedBy: req.user._id,
+  };
+  if (notes) updateData.notes = notes;
+
+  const booking = await bookingsService.updateBookings(filter, updateData, { new: true });
+  if (!booking) {
+    throw new ApiError(httpStatus.NOT_FOUND, 'Booking not found');
+  }
+
+  try {
+    await BookingTracking.create({
+      bookingId: booking._id,
+      status: 'vendorOnTheWay',
+      note: notes || 'Vendor is on the way',
+      createdBy: req.user._id,
+      updatedBy: req.user._id,
+    });
+  } catch (err) {
+    // ignore tracking creation error
+  }
+
+  const data = await bookingsService.getBookingSummaryDetails(booking._id);
+  return res.status(httpStatus.OK).send({
+    message: 'Booking status updated to on the way',
+    results: data,
+  });
+});
+
+export const sendBookingCompletionOtp = catchAsync(async (req, res) => {
+  const { bookingsId } = req.params;
+
+  const filter = mongoose.Types.ObjectId.isValid(bookingsId)
+    ? { $or: [{ _id: bookingsId }, { bookingId: bookingsId }], isDeleted: { $ne: true } }
+    : { bookingId: bookingsId, isDeleted: { $ne: true } };
+
+  const booking = await Bookings.findOne(filter);
+  if (!booking) {
+    throw new ApiError(httpStatus.NOT_FOUND, 'Booking not found');
+  }
+
+  if (booking.status === EnumStatusOfBookings.COMPLETED) {
+    throw new ApiError(httpStatus.BAD_REQUEST, 'Booking is already marked as completed');
+  }
+
+  if (booking.status === EnumStatusOfBookings.CANCELLED) {
+    throw new ApiError(httpStatus.BAD_REQUEST, 'Cannot complete a cancelled booking');
+  }
+
+  const customer = await User.findOne({ _id: booking.customerId, isDeleted: { $ne: true } });
+  if (!customer) {
+    throw new ApiError(httpStatus.NOT_FOUND, 'Customer associated with this booking not found');
+  }
+
+  const otp = generateOtp();
+  booking.otp = String(otp);
+  booking.otpExpiresAt = new Date(Date.now() + 10 * 60 * 1000); // 10 minutes validity
+  booking.updatedBy = req.user._id;
+  await booking.save();
+
+  if (customer.mobileNumber) {
+    const countryCode = (customer.countryCode || '+91').replace('+', '');
+    const mobileWithCountry = `${countryCode}${customer.mobileNumber}`;
+    try {
+      await sendOtpToMobile(mobileWithCountry, otp);
+    } catch (err) {
+      console.error('Error sending completion OTP to customer mobile:', err.message);
+      if (customer.email) {
+        try {
+          await emailService.sendOtpVerificationEmail(customer, otp);
+        } catch (emailErr) {
+          throw new ApiError(httpStatus.INTERNAL_SERVER_ERROR, 'Failed to send OTP to customer');
+        }
+      } else {
+        throw new ApiError(httpStatus.INTERNAL_SERVER_ERROR, 'Failed to send OTP to customer mobile number');
+      }
+    }
+  } else if (customer.email) {
+    try {
+      await emailService.sendOtpVerificationEmail(customer, otp);
+    } catch (err) {
+      throw new ApiError(httpStatus.INTERNAL_SERVER_ERROR, 'Failed to send OTP to customer email');
+    }
+  } else {
+    throw new ApiError(httpStatus.BAD_REQUEST, 'Customer does not have a registered mobile number or email');
+  }
+
+  const maskedNumber = customer.mobileNumber ? `******${String(customer.mobileNumber).slice(-4)}` : customer.email;
+
+  return res.status(httpStatus.OK).send({
+    message: `OTP sent successfully to customer (${maskedNumber})`,
+    bookingId: booking.bookingId || booking._id,
+  });
+});
+
+export const verifyBookingCompletionOtp = catchAsync(async (req, res) => {
+  const { bookingsId } = req.params;
+  const { otp, notes, paymentStatus, paymentMethod } = req.body;
+
+  const filter = mongoose.Types.ObjectId.isValid(bookingsId)
+    ? { $or: [{ _id: bookingsId }, { bookingId: bookingsId }], isDeleted: { $ne: true } }
+    : { bookingId: bookingsId, isDeleted: { $ne: true } };
+
+  const booking = await Bookings.findOne(filter);
+  if (!booking) {
+    throw new ApiError(httpStatus.NOT_FOUND, 'Booking not found');
+  }
+
+  if (booking.status === EnumStatusOfBookings.COMPLETED) {
+    throw new ApiError(httpStatus.BAD_REQUEST, 'Booking is already completed');
+  }
+
+  if (booking.status === EnumStatusOfBookings.CANCELLED) {
+    throw new ApiError(httpStatus.BAD_REQUEST, 'Cannot complete a cancelled booking');
+  }
+
+  if (!booking.otp) {
+    throw new ApiError(httpStatus.BAD_REQUEST, 'No completion OTP was generated for this booking. Please send OTP first.');
+  }
+
+  if (booking.otpExpiresAt && new Date(booking.otpExpiresAt).getTime() < Date.now()) {
+    throw new ApiError(httpStatus.BAD_REQUEST, 'OTP has expired. Please request a new OTP using resend OTP API.');
+  }
+
+  if (String(booking.otp).trim() !== String(otp).trim()) {
+    throw new ApiError(httpStatus.BAD_REQUEST, 'Invalid OTP. Please check the OTP received by the customer.');
+  }
+
+  booking.status = EnumStatusOfBookings.COMPLETED;
+  booking.serviceEndTime = new Date();
+  booking.otp = null;
+  booking.otpExpiresAt = null;
+  booking.updatedBy = req.user._id;
+  if (notes) booking.notes = notes;
+  if (paymentStatus) booking.paymentStatus = paymentStatus;
+  if (paymentMethod) booking.paymentMethod = paymentMethod;
+  await booking.save();
+
+  try {
+    await BookingTracking.create({
+      bookingId: booking._id,
+      status: 'completed',
+      note: notes || 'Booking completed by vendor after customer OTP verification',
+      createdBy: req.user._id,
+      updatedBy: req.user._id,
+    });
+  } catch (err) {
+    // ignore tracking creation error
+  }
+
+  if (booking.vendorId) {
+    try {
+      await VendorUser.findByIdAndUpdate(booking.vendorId, { $inc: { completedBookings: 1 } });
+    } catch (err) {
+      // ignore
+    }
+  }
+
+  const data = await bookingsService.getBookingSummaryDetails(booking._id);
+  return res.status(httpStatus.OK).send({
+    message: 'OTP verified and booking completed successfully',
+    results: data,
+  });
+});
+
+export const resendBookingCompletionOtp = catchAsync(async (req, res) => {
+  const { bookingsId } = req.params;
+
+  const filter = mongoose.Types.ObjectId.isValid(bookingsId)
+    ? { $or: [{ _id: bookingsId }, { bookingId: bookingsId }], isDeleted: { $ne: true } }
+    : { bookingId: bookingsId, isDeleted: { $ne: true } };
+
+  const booking = await Bookings.findOne(filter);
+  if (!booking) {
+    throw new ApiError(httpStatus.NOT_FOUND, 'Booking not found');
+  }
+
+  if (booking.status === EnumStatusOfBookings.COMPLETED) {
+    throw new ApiError(httpStatus.BAD_REQUEST, 'Booking is already marked as completed');
+  }
+
+  if (booking.status === EnumStatusOfBookings.CANCELLED) {
+    throw new ApiError(httpStatus.BAD_REQUEST, 'Cannot complete a cancelled booking');
+  }
+
+  const customer = await User.findOne({ _id: booking.customerId, isDeleted: { $ne: true } });
+  if (!customer) {
+    throw new ApiError(httpStatus.NOT_FOUND, 'Customer associated with this booking not found');
+  }
+
+  const otp = generateOtp();
+  booking.otp = String(otp);
+  booking.otpExpiresAt = new Date(Date.now() + 10 * 60 * 1000); // 10 minutes expiry
+  booking.updatedBy = req.user._id;
+  await booking.save();
+
+  if (customer.mobileNumber) {
+    const countryCode = (customer.countryCode || '+91').replace('+', '');
+    const mobileWithCountry = `${countryCode}${customer.mobileNumber}`;
+    try {
+      await sendOtpToMobile(mobileWithCountry, otp);
+    } catch (err) {
+      console.error('Error resending completion OTP to customer mobile:', err.message);
+      if (customer.email) {
+        try {
+          await emailService.sendOtpVerificationEmail(customer, otp);
+        } catch (emailErr) {
+          throw new ApiError(httpStatus.INTERNAL_SERVER_ERROR, 'Failed to resend OTP to customer');
+        }
+      } else {
+        throw new ApiError(httpStatus.INTERNAL_SERVER_ERROR, 'Failed to resend OTP to customer mobile number');
+      }
+    }
+  } else if (customer.email) {
+    try {
+      await emailService.sendOtpVerificationEmail(customer, otp);
+    } catch (err) {
+      throw new ApiError(httpStatus.INTERNAL_SERVER_ERROR, 'Failed to resend OTP to customer email');
+    }
+  } else {
+    throw new ApiError(httpStatus.BAD_REQUEST, 'Customer does not have a registered mobile number or email');
+  }
+
+  const maskedNumber = customer.mobileNumber ? `******${String(customer.mobileNumber).slice(-4)}` : customer.email;
+
+  return res.status(httpStatus.OK).send({
+    message: `OTP resent successfully to customer (${maskedNumber})`,
+    bookingId: booking.bookingId || booking._id,
   });
 });
 

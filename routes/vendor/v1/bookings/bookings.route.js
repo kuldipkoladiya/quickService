@@ -58,4 +58,62 @@ router
   .put(auth('vendor'), validate(bookingsValidation.cancelBooking), bookingsController.cancelBooking)
   .post(auth('vendor'), validate(bookingsValidation.cancelBooking), bookingsController.cancelBooking);
 
+router
+  .route('/:bookingsId/ontheway')
+  /**
+   * onTheWayBooking
+   * */
+  .put(auth('vendor'), validate(bookingsValidation.onTheWayBooking), bookingsController.onTheWayBooking)
+  .post(auth('vendor'), validate(bookingsValidation.onTheWayBooking), bookingsController.onTheWayBooking);
+
+router
+  .route('/:bookingsId/complete/send-otp')
+  /**
+   * sendBookingCompletionOtp
+   * */
+  .post(auth('vendor'), validate(bookingsValidation.sendCompletionOtp), bookingsController.sendBookingCompletionOtp);
+
+router
+  .route('/:bookingsId/send-otp')
+  /**
+   * alias sendBookingCompletionOtp
+   * */
+  .post(auth('vendor'), validate(bookingsValidation.sendCompletionOtp), bookingsController.sendBookingCompletionOtp);
+
+router
+  .route('/:bookingsId/complete/verify-otp')
+  /**
+   * verifyBookingCompletionOtp
+   * */
+  .post(auth('vendor'), validate(bookingsValidation.verifyCompletionOtp), bookingsController.verifyBookingCompletionOtp);
+
+router
+  .route('/:bookingsId/complete')
+  /**
+   * alias completeBooking (verify OTP)
+   * */
+  .post(auth('vendor'), validate(bookingsValidation.verifyCompletionOtp), bookingsController.verifyBookingCompletionOtp)
+  .put(auth('vendor'), validate(bookingsValidation.verifyCompletionOtp), bookingsController.verifyBookingCompletionOtp);
+
+router
+  .route('/:bookingsId/verify-otp')
+  /**
+   * alias verifyBookingCompletionOtp
+   * */
+  .post(auth('vendor'), validate(bookingsValidation.verifyCompletionOtp), bookingsController.verifyBookingCompletionOtp);
+
+router
+  .route('/:bookingsId/complete/resend-otp')
+  /**
+   * resendBookingCompletionOtp
+   * */
+  .post(auth('vendor'), validate(bookingsValidation.resendCompletionOtp), bookingsController.resendBookingCompletionOtp);
+
+router
+  .route('/:bookingsId/resend-otp')
+  /**
+   * alias resendBookingCompletionOtp
+   * */
+  .post(auth('vendor'), validate(bookingsValidation.resendCompletionOtp), bookingsController.resendBookingCompletionOtp);
+
 export default router;
