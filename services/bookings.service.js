@@ -83,6 +83,26 @@ export async function getBookingSummaryDetails(identifier) {
     throw new ApiError(httpStatus.NOT_FOUND, 'Booking not found');
   }
 
+  // Ensure addressId is populated / fallback to customer default address
+  let resolvedAddress = booking.addressId;
+  if (!resolvedAddress && booking.customerId) {
+    const cId = booking.customerId._id || booking.customerId;
+    resolvedAddress =
+      (await Address.findOne({ userId: cId, isDefault: true, isDeleted: { $ne: true } })) ||
+      (await Address.findOne({ userId: cId, isDeleted: { $ne: true } }));
+  } else if (resolvedAddress && typeof resolvedAddress === 'object' && !resolvedAddress.address) {
+    const directAddr = await Address.findById(resolvedAddress._id || resolvedAddress);
+    if (directAddr) {
+      resolvedAddress = directAddr;
+    }
+  } else if (resolvedAddress && (typeof resolvedAddress === 'string' || mongoose.Types.ObjectId.isValid(resolvedAddress))) {
+    const directAddr = await Address.findById(resolvedAddress);
+    if (directAddr) {
+      resolvedAddress = directAddr;
+    }
+  }
+  booking.addressId = resolvedAddress;
+
   // Format Vendor info for UI
   const vendorUserObj = booking.vendorId || {};
   const vendorUserAccount = vendorUserObj.userId || {};
@@ -456,8 +476,10 @@ export async function getBookingSummaryDetails(identifier) {
     email: customerDoc.email,
     profileImage: customerDoc.profileImage || customerDoc.profilePic || null,
   };
+  bookingJson.addressId = addressObj && typeof addressObj === 'object' && addressObj._id ? addressObj : booking.addressId;
   bookingJson.formattedAddress = formattedCustomerAddress;
   bookingJson.address = addressObj;
+  bookingJson.customerAddress = addressObj;
   bookingJson.serviceName = primaryServiceName;
   bookingJson.serviceNames = serviceNamesList;
   bookingJson.distanceInKm = distanceKm;
@@ -712,6 +734,7 @@ export async function getOne(query, options = {}) {
     }
   }
 
+  // eslint-disable-next-line no-use-before-define
   return enrichBookingWithDetails(bookingJson);
 }
 
@@ -866,6 +889,28 @@ export function enrichBookingWithDetails(booking) {
     email: customer.email,
     profileImage: customer.profileImage || customer.profilePic || null,
   };
+  b.addressId = typeof address === 'object' && address !== null && address._id ? address : b.addressId;
+  b.address = typeof address === 'object' && address !== null && address._id ? address : formattedAddress;
+  b.customerAddress =
+    typeof address === 'object' && address !== null && address._id
+      ? {
+          addressId: address._id,
+          address: address.address,
+          floor: address.floor,
+          houseNumber: address.houseNumber,
+          city: address.city,
+          state: address.state,
+          pinCode: address.pinCode,
+          landmark: address.landmark,
+          locationType: address.locationType,
+          receiverName: address.receiverName,
+          receiverMobile: address.receiverMobile,
+          location: address.location,
+          latitude: address.latitude,
+          longitude: address.longitude,
+          displayAddress: formattedAddress,
+        }
+      : null;
   b.formattedAddress = formattedAddress;
   b.serviceName = serviceName;
   b.serviceNames = serviceNameList;
@@ -875,6 +920,64 @@ export function enrichBookingWithDetails(booking) {
   b.distance = distanceInKm;
 
   return b;
+}
+
+export async function populateMissingAddresses(bookings) {
+  if (!bookings || !Array.isArray(bookings) || bookings.length === 0) return bookings;
+
+  const missingAddressIds = [];
+  const missingCustomerIds = [];
+
+  // eslint-disable-next-line no-restricted-syntax
+  for (const b of bookings) {
+    const addr = b.addressId;
+    if (addr && (typeof addr === 'string' || mongoose.Types.ObjectId.isValid(addr)) && !addr.address) {
+      missingAddressIds.push(addr._id || addr);
+    } else if (!addr && b.customerId) {
+      const cId = b.customerId._id || b.customerId;
+      if (cId) missingCustomerIds.push(cId);
+    }
+  }
+
+  const addressMapById = new Map();
+  const addressMapByCustomerId = new Map();
+
+  if (missingAddressIds.length > 0) {
+    const foundAddresses = await Address.find({ _id: { $in: missingAddressIds } });
+    // eslint-disable-next-line no-restricted-syntax
+    for (const a of foundAddresses) {
+      addressMapById.set(a._id.toString(), a);
+    }
+  }
+
+  if (missingCustomerIds.length > 0) {
+    const foundCustomerAddresses = await Address.find({
+      userId: { $in: missingCustomerIds },
+      isDeleted: { $ne: true },
+    }).sort({ isDefault: -1 });
+    // eslint-disable-next-line no-restricted-syntax
+    for (const a of foundCustomerAddresses) {
+      if (a.userId && !addressMapByCustomerId.has(a.userId.toString())) {
+        addressMapByCustomerId.set(a.userId.toString(), a);
+      }
+    }
+  }
+  // eslint-disable-next-line no-restricted-syntax
+  for (const b of bookings) {
+    const bAddr = b.addressId;
+    // eslint-disable-next-line no-nested-ternary
+    const addrKey = bAddr ? (bAddr._id ? bAddr._id.toString() : bAddr.toString()) : null;
+    if (addrKey && addressMapById.has(addrKey)) {
+      b.addressId = addressMapById.get(addrKey);
+    } else if (!b.addressId && b.customerId) {
+      const cIdStr = (b.customerId._id || b.customerId).toString();
+      if (addressMapByCustomerId.has(cIdStr)) {
+        b.addressId = addressMapByCustomerId.get(cIdStr);
+      }
+    }
+  }
+
+  return bookings;
 }
 
 export function buildBookingStatusFilter(status) {
@@ -909,7 +1012,8 @@ export async function getBookingsList(filter, options = {}) {
   } else {
     query = query.sort({ createdAt: -1 });
   }
-  const bookings = await query;
+  let bookings = await query;
+  bookings = await populateMissingAddresses(bookings);
   return bookings.map((b) => enrichBookingWithDetails(b));
 }
 
@@ -929,6 +1033,7 @@ export async function getBookingsListWithPagination(filter, options = {}) {
   };
   const bookings = await Bookings.paginate(filter, paginateOptions);
   if (bookings && Array.isArray(bookings.docs)) {
+    bookings.docs = await populateMissingAddresses(bookings.docs);
     bookings.docs = bookings.docs.map((b) => enrichBookingWithDetails(b));
   }
   return bookings;
@@ -1011,6 +1116,18 @@ export async function createBookings(body = {}) {
     const customerId = await User.findOne({ _id: body.customerId });
     if (!customerId) {
       throw new ApiError(httpStatus.BAD_REQUEST, 'field customerId is not valid');
+    }
+    // Auto-attach default customer address if addressId was not provided in request
+    if (!body.addressId) {
+      const defaultAddress =
+        // eslint-disable-next-line no-await-in-loop
+        (await Address.findOne({ userId: body.customerId, isDefault: true, isDeleted: { $ne: true } })) ||
+        // eslint-disable-next-line no-await-in-loop
+        (await Address.findOne({ userId: body.customerId, isDeleted: { $ne: true } }));
+      if (defaultAddress) {
+        // eslint-disable-next-line no-param-reassign
+        body.addressId = defaultAddress._id;
+      }
     }
   }
   if (body.vendorId) {
