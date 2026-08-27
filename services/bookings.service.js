@@ -53,6 +53,26 @@ function getVendorVisitCharge(vendorUser, distanceKm = null) {
   return 100;
 }
 
+export function formatTime(date = new Date()) {
+  try {
+    return new Date(date).toLocaleTimeString('en-US', {
+      timeZone: 'Asia/Kolkata',
+      hour: '2-digit',
+      minute: '2-digit',
+      hour12: true,
+    });
+  } catch (e) {
+    const d = new Date(date);
+    let hours = d.getHours();
+    let minutes = d.getMinutes();
+    const ampm = hours >= 12 ? 'PM' : 'AM';
+    hours %= 12;
+    hours = hours || 12;
+    minutes = minutes < 10 ? `0${minutes}` : minutes;
+    return `${hours}:${minutes} ${ampm}`;
+  }
+}
+
 export const defaultBookingPopulate = [
   {
     path: 'vendorId',
@@ -179,7 +199,7 @@ export function enrichBookingWithDetails(booking) {
 
   // Address ID only from real populated database object (null if no DB address)
   const populatedAddress = typeof address === 'object' && address !== null && address._id ? address : b.addressId || null;
-  const timeSlot = b.timeSlot || b.bookingTime || '';
+  const timeSlot = b.timeSlot || b.bookingTime || (b.createdAt ? formatTime(b.createdAt) : formatTime(new Date()));
 
   return {
     customerName,
@@ -377,16 +397,6 @@ export async function getBookingsListWithPagination(filter, options = {}) {
   return bookings;
 }
 
-function formatTime(date) {
-  let hours = date.getHours();
-  let minutes = date.getMinutes();
-  const ampm = hours >= 12 ? 'PM' : 'AM';
-  hours %= 12;
-  hours = hours || 12;
-  minutes = minutes < 10 ? `0${minutes}` : minutes;
-  return `${hours}:${minutes} ${ampm}`;
-}
-
 async function generateUniqueBookingId() {
   const characters = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789';
   let isUnique = false;
@@ -414,6 +424,8 @@ export async function createBookings(body = {}) {
 
   // Automatically default bookingDate and bookingTime to current if not provided
   const now = new Date();
+  const realTime = formatTime(now);
+
   if (!body.bookingDate) {
     // eslint-disable-next-line no-param-reassign
     body.bookingDate = now;
@@ -427,18 +439,19 @@ export async function createBookings(body = {}) {
     vendorAvailability = await VendorAvailability.findOne({ vendorId: body.vendorId, isDeleted: { $ne: true } });
   }
 
-  // Automatically determine booking type & scheduling details from BE
-  if (body.timeSlot || body.bookingType === 'schedule') {
+  // Synchronize timeSlot & bookingTime reliably
+  const resolvedTime = body.timeSlot || body.bookingTime || realTime;
+  // eslint-disable-next-line no-param-reassign
+  body.timeSlot = resolvedTime;
+  // eslint-disable-next-line no-param-reassign
+  body.bookingTime = resolvedTime;
+
+  if (body.bookingType === 'schedule' || (body.timeSlot && body.timeSlot !== realTime)) {
     // eslint-disable-next-line no-param-reassign
     body.bookingType = 'schedule';
-    // eslint-disable-next-line no-param-reassign
-    body.bookingTime = body.timeSlot || body.bookingTime || formatTime(now);
   } else {
-    // Vendor is on instant visit or default
     // eslint-disable-next-line no-param-reassign
     body.bookingType = (vendorAvailability && vendorAvailability.bookingOption) || 'instant';
-    // eslint-disable-next-line no-param-reassign
-    body.bookingTime = body.bookingTime || formatTime(now);
     if (body.bookingType === 'instant' && !body.estimatedArrival) {
       // eslint-disable-next-line no-param-reassign
       body.estimatedArrival = (vendorAvailability && vendorAvailability.instantArrivalEstimate) || '30-40 mins';
