@@ -1,7 +1,7 @@
 import mongoose from 'mongoose';
 import ApiError from 'utils/ApiError';
 import httpStatus from 'http-status';
-import { Bookings, User, VendorUser, Services, VendorService, Address, BusinessAddress, VendorAvailability } from 'models';
+import { Bookings, User, VendorUser, Services, VendorService, Address, VendorAvailability } from 'models';
 import { EnumStatusOfBookings } from 'models/enum.model';
 import { calculateVisitCharges } from './vendorUser.service';
 
@@ -53,691 +53,6 @@ function getVendorVisitCharge(vendorUser, distanceKm = null) {
   return 100;
 }
 
-export async function getBookingSummaryDetails(identifier) {
-  let filter = {};
-  if (typeof identifier === 'object' && identifier !== null && !Array.isArray(identifier)) {
-    filter = identifier;
-  } else if (mongoose.Types.ObjectId.isValid(identifier)) {
-    filter = { $or: [{ _id: identifier }, { bookingId: identifier }] };
-  } else {
-    filter = { bookingId: identifier };
-  }
-
-  const booking = await Bookings.findOne(filter)
-    .populate({
-      path: 'vendorId',
-      populate: [
-        {
-          path: 'userId',
-          select: 'name fullName email mobileNumber profileImage profilePic userProfilePic location images',
-        },
-        { path: 'categoryId', select: 'name title image' },
-      ],
-    })
-    .populate('customerId', 'name fullName email mobileNumber profileImage profilePic userProfilePic')
-    .populate('addressId')
-    .populate('vendorServiceId')
-    .populate('serviceIds');
-
-  if (!booking) {
-    throw new ApiError(httpStatus.NOT_FOUND, 'Booking not found');
-  }
-
-  // Ensure addressId is populated / fallback to customer default address
-  let resolvedAddress = booking.addressId;
-  if (!resolvedAddress && booking.customerId) {
-    const cId = booking.customerId._id || booking.customerId;
-    resolvedAddress =
-      (await Address.findOne({ userId: cId, isDefault: true, isDeleted: { $ne: true } })) ||
-      (await Address.findOne({ userId: cId, isDeleted: { $ne: true } }));
-  } else if (resolvedAddress && typeof resolvedAddress === 'object' && !resolvedAddress.address) {
-    const directAddr = await Address.findById(resolvedAddress._id || resolvedAddress);
-    if (directAddr) {
-      resolvedAddress = directAddr;
-    }
-  } else if (resolvedAddress && (typeof resolvedAddress === 'string' || mongoose.Types.ObjectId.isValid(resolvedAddress))) {
-    const directAddr = await Address.findById(resolvedAddress);
-    if (directAddr) {
-      resolvedAddress = directAddr;
-    }
-  }
-  booking.addressId = resolvedAddress;
-
-  // Format Vendor info for UI
-  const vendorUserObj = booking.vendorId || {};
-  const vendorUserAccount = vendorUserObj.userId || {};
-
-  // Get Vendor's business address
-  let vendorBusinessAddress = null;
-  if (booking.vendorId) {
-    let vendorUserId = (booking.vendorId.userId && booking.vendorId.userId._id) || booking.vendorId.userId;
-    if (!vendorUserId && typeof booking.vendorId === 'string') {
-      // eslint-disable-next-line no-await-in-loop
-      const vendorDoc = await VendorUser.findById(booking.vendorId);
-      if (vendorDoc) {
-        vendorUserId = vendorDoc.userId;
-      }
-    }
-    const possibleUserIds = [vendorUserId, vendorUserObj._id, vendorUserAccount._id].filter(Boolean);
-    vendorBusinessAddress = await BusinessAddress.findOne({
-      $or: [{ userId: { $in: possibleUserIds } }, { createdBy: { $in: possibleUserIds } }],
-      isDeleted: { $ne: true },
-    });
-  }
-
-  // Get Vendor's Availability details
-  let vendorAvailability = null;
-  if (booking.vendorId) {
-    const vId = booking.vendorId._id || booking.vendorId;
-    const va = await VendorAvailability.findOne({ vendorId: vId, isDeleted: { $ne: true } });
-    if (va) {
-      const dayNames = ['sunday', 'monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday'];
-      const todayDayName = dayNames[new Date().getDay()];
-
-      const isOnline = va.isOnline !== undefined ? Boolean(va.isOnline) : true;
-      const storeStatus = va.storeStatus || (isOnline ? 'online' : 'offline');
-      const vendorBookingOption = va.bookingOption || 'instant';
-      const instantArrivalEstimate = va.instantArrivalEstimate || '30-40 mins';
-
-      let isOpenToday = true;
-      if (va.weeklySchedule && Array.isArray(va.weeklySchedule)) {
-        const todaySchedule = va.weeklySchedule.find((s) => s.day && s.day.toLowerCase() === todayDayName);
-        if (todaySchedule) {
-          isOpenToday = Boolean(todaySchedule.isOpen);
-        }
-      }
-
-      const isAvailable = isOnline && isOpenToday;
-
-      let statusText = 'Available';
-      let statusBadge = 'available';
-
-      if (!isOnline) {
-        statusText = 'Currently Unavailable';
-        statusBadge = 'offline';
-      } else if (!isOpenToday) {
-        statusText = 'Closed Today';
-        statusBadge = 'closed';
-      } else if (vendorBookingOption === 'instant') {
-        statusText = `Arriving in ${instantArrivalEstimate}`;
-        statusBadge = 'instant';
-      } else {
-        statusText = 'Open for Schedule';
-        statusBadge = 'schedule';
-      }
-
-      vendorAvailability = {
-        isOnline,
-        storeStatus,
-        isOpenToday,
-        isAvailable,
-        statusText,
-        statusBadge,
-        bookingOption: vendorBookingOption,
-        instantArrivalEstimate,
-      };
-
-      // Only include day-wise open & close weeklySchedule if bookingOption is schedule
-      const effectiveBookingOption = booking.bookingType || vendorBookingOption;
-      if (
-        effectiveBookingOption === 'schedule' ||
-        effectiveBookingOption === 'SCHEDULE' ||
-        vendorBookingOption === 'schedule'
-      ) {
-        vendorAvailability.weeklySchedule = va.weeklySchedule || [];
-      }
-    }
-  }
-
-  // Calculate distance if coordinates are available
-  let distanceKm = null;
-  const custAddress = booking.addressId || {};
-  let cLat = null;
-  let cLon = null;
-  if (
-    custAddress.latitude !== undefined &&
-    custAddress.latitude !== null &&
-    custAddress.longitude !== undefined &&
-    custAddress.longitude !== null
-  ) {
-    cLat = Number(custAddress.latitude);
-    cLon = Number(custAddress.longitude);
-  } else if (
-    custAddress.location &&
-    Array.isArray(custAddress.location.coordinates) &&
-    custAddress.location.coordinates.length === 2
-  ) {
-    [cLon, cLat] = custAddress.location.coordinates;
-  } else if (
-    booking.latitude !== undefined &&
-    booking.latitude !== null &&
-    booking.longitude !== undefined &&
-    booking.longitude !== null
-  ) {
-    cLat = Number(booking.latitude);
-    cLon = Number(booking.longitude);
-  }
-
-  let vLat = null;
-  let vLon = null;
-  if (
-    vendorBusinessAddress &&
-    vendorBusinessAddress.location &&
-    Array.isArray(vendorBusinessAddress.location.coordinates) &&
-    vendorBusinessAddress.location.coordinates.length === 2
-  ) {
-    [vLon, vLat] = vendorBusinessAddress.location.coordinates;
-  } else if (vendorBusinessAddress && vendorBusinessAddress.latitude && vendorBusinessAddress.longitude) {
-    vLat = Number(vendorBusinessAddress.latitude);
-    vLon = Number(vendorBusinessAddress.longitude);
-  } else if (
-    vendorUserAccount.location &&
-    Array.isArray(vendorUserAccount.location.coordinates) &&
-    vendorUserAccount.location.coordinates.length === 2
-  ) {
-    [vLon, vLat] = vendorUserAccount.location.coordinates;
-  } else if (
-    vendorUserObj.location &&
-    Array.isArray(vendorUserObj.location.coordinates) &&
-    vendorUserObj.location.coordinates.length === 2
-  ) {
-    [vLon, vLat] = vendorUserObj.location.coordinates;
-  } else if (vendorUserObj.latitude && vendorUserObj.longitude) {
-    vLat = Number(vendorUserObj.latitude);
-    vLon = Number(vendorUserObj.longitude);
-  }
-
-  if (cLat !== null && cLon !== null && vLat !== null && vLon !== null) {
-    distanceKm = calculateDistanceInKm(cLat, cLon, vLat, vLon);
-  }
-
-  // Find all vendor services for this vendor and selected serviceIds
-  const queryConditions = [];
-  if (booking.vendorServiceId) {
-    const vsId = booking.vendorServiceId._id || booking.vendorServiceId;
-    queryConditions.push({ _id: vsId });
-  }
-  if (booking.vendorId && booking.serviceIds && Array.isArray(booking.serviceIds) && booking.serviceIds.length > 0) {
-    const sIds = booking.serviceIds.map((s) => (s._id ? s._id : s));
-    const vId = booking.vendorId._id || booking.vendorId;
-    queryConditions.push({ vendorId: vId, serviceId: { $in: sIds } });
-  }
-
-  let vendorServicesList = [];
-  if (queryConditions.length > 0) {
-    vendorServicesList = await VendorService.find({
-      $or: queryConditions,
-      isDeleted: { $ne: true },
-    }).populate('serviceId');
-  }
-
-  // Extract service breakdown
-  const serviceDetails = [];
-  let calculatedServicesTotal = 0;
-  let fixedServicesTotal = 0;
-  let hasVisitingService = false;
-  const processedServiceIds = new Set();
-  const singleVisitCharge = getVendorVisitCharge(vendorUserObj, distanceKm);
-
-  // eslint-disable-next-line no-restricted-syntax
-  for (const vs of vendorServicesList) {
-    const sId = vs.serviceId && vs.serviceId._id ? vs.serviceId._id.toString() : vs._id.toString();
-    if (!processedServiceIds.has(sId)) {
-      processedServiceIds.add(sId);
-      const rawTitle = (vs.serviceId && vs.serviceId.title) || vs.title || 'Service';
-      const pricingType = vs.pricingType || 'fixed';
-
-      let itemPrice = 0;
-      if (pricingType === 'fixed') {
-        itemPrice = vs.price !== undefined && vs.price !== null ? vs.price : 0;
-        fixedServicesTotal += itemPrice;
-      } else if (pricingType === 'visiting') {
-        hasVisitingService = true;
-        itemPrice = singleVisitCharge;
-      }
-
-      serviceDetails.push({
-        vendorServiceId: vs._id,
-        serviceId: vs.serviceId ? vs.serviceId._id : null,
-        title: rawTitle.endsWith('Fee') ? rawTitle : `${rawTitle} Fee`,
-        rawTitle,
-        pricingType,
-        price: itemPrice,
-      });
-    }
-  }
-
-  // Calculate services total and subtotal according to pricing type
-  if (fixedServicesTotal > 0) {
-    calculatedServicesTotal = fixedServicesTotal;
-  } else if (hasVisitingService || vendorUserObj) {
-    calculatedServicesTotal = singleVisitCharge;
-  }
-
-  let calculatedSubtotal = 0;
-  if (fixedServicesTotal > 0) {
-    calculatedSubtotal = fixedServicesTotal + (hasVisitingService ? singleVisitCharge : 0);
-  } else if (hasVisitingService || vendorUserObj) {
-    calculatedSubtotal = singleVisitCharge;
-  }
-
-  // If no vendorServices were matched but serviceIds exists, extract directly from serviceIds
-  if (
-    serviceDetails.length === 0 &&
-    booking.serviceIds &&
-    Array.isArray(booking.serviceIds) &&
-    booking.serviceIds.length > 0
-  ) {
-    // eslint-disable-next-line no-restricted-syntax
-    for (const s of booking.serviceIds) {
-      const rawTitle = s.title || 'Service';
-      serviceDetails.push({
-        vendorServiceId: booking.vendorServiceId ? booking.vendorServiceId._id || booking.vendorServiceId : null,
-        serviceId: s._id || s,
-        title: rawTitle.endsWith('Fee') ? rawTitle : `${rawTitle} Fee`,
-        rawTitle,
-        pricingType: 'visiting',
-        price: singleVisitCharge,
-      });
-    }
-    calculatedServicesTotal = singleVisitCharge;
-    calculatedSubtotal = singleVisitCharge;
-  }
-
-  // If still empty fallback
-  if (serviceDetails.length === 0) {
-    serviceDetails.push({
-      vendorServiceId: booking.vendorServiceId ? booking.vendorServiceId._id || booking.vendorServiceId : null,
-      serviceId: booking.serviceId || null,
-      title: 'Visiting Fee',
-      rawTitle: 'Visiting Service',
-      pricingType: 'visiting',
-      price: singleVisitCharge,
-    });
-    calculatedServicesTotal = singleVisitCharge;
-    calculatedSubtotal = singleVisitCharge;
-  }
-
-  const subtotal = booking.subtotal ? booking.subtotal : calculatedSubtotal;
-  const visitingCharge = hasVisitingService ? singleVisitCharge : 0;
-  const serviceFee =
-    booking.serviceFee !== undefined && booking.serviceFee > 0
-      ? booking.serviceFee
-      : Math.round(subtotal * 0.05 * 100) / 100;
-  const tax = booking.tax !== undefined && booking.tax > 0 ? booking.tax : Math.round(subtotal * 0.05 * 100) / 100;
-  const totalPayable =
-    booking.totalAmount !== undefined && booking.totalAmount > 0
-      ? booking.totalAmount
-      : Math.round((subtotal + serviceFee + tax) * 100) / 100;
-
-  // Format Vendor info for UI
-  const vendorName =
-    vendorUserObj.businessName || vendorUserAccount.fullName || vendorUserAccount.name || 'Star Unisex Saloon';
-  const vendorRating = vendorUserObj.rating || 4.5;
-  const vendorTotalReviews = vendorUserObj.totalReviews || 0;
-  const vendorIsVerified = Boolean(vendorUserObj.isKycVerified);
-
-  let vendorLocation = vendorUserAccount.location || 'Gandhinagar, Gujarat';
-  if (vendorBusinessAddress) {
-    const parts = [vendorBusinessAddress.city, vendorBusinessAddress.state].filter(Boolean);
-    if (parts.length > 0) vendorLocation = parts.join(', ');
-  }
-
-  const vendorImages =
-    vendorUserAccount.images && vendorUserAccount.images.length > 0 ? vendorUserAccount.images.map((img) => img.url) : [];
-
-  const userProfilePicUrl =
-    (vendorUserAccount.userProfilePic &&
-      vendorUserAccount.userProfilePic.length > 0 &&
-      vendorUserAccount.userProfilePic[0].url) ||
-    null;
-
-  const vendorProfilePic =
-    vendorUserAccount.profilePic || vendorUserAccount.profileImage || userProfilePicUrl || vendorImages[0] || null;
-
-  // Format Address for UI
-  const addressObj = booking.addressId || {};
-  const formattedCustomerAddress = addressObj.address
-    ? `${addressObj.floor ? `${addressObj.floor}, ` : ''}${addressObj.address}${
-        addressObj.landmark ? `, ${addressObj.landmark}` : ''
-      }${addressObj.location ? `, ${addressObj.location}` : ''}`
-    : '12-02, Star Building, Sector 4C, Gandhinagar';
-
-  let bookingJson = booking;
-  if (typeof booking.toJSON === 'function') {
-    bookingJson = booking.toJSON();
-  } else if (typeof booking.toObject === 'function') {
-    bookingJson = booking.toObject();
-  } else {
-    bookingJson = { ...booking };
-  }
-
-  if (vendorBusinessAddress) {
-    bookingJson.businessAddress = vendorBusinessAddress;
-    if (bookingJson.vendorId && typeof bookingJson.vendorId === 'object') {
-      bookingJson.vendorId.businessAddress = vendorBusinessAddress;
-    }
-  }
-
-  if (vendorAvailability) {
-    bookingJson.vendorAvailability = vendorAvailability;
-    if (bookingJson.vendorId && typeof bookingJson.vendorId === 'object') {
-      bookingJson.vendorId.vendorAvailability = vendorAvailability;
-    }
-  }
-
-  // Attach price, pricingType, and vendorServiceId directly to serviceIds items if available
-  if (bookingJson.serviceIds && Array.isArray(bookingJson.serviceIds)) {
-    const vsMapByServiceId = new Map();
-    // eslint-disable-next-line no-restricted-syntax
-    for (const vs of vendorServicesList) {
-      if (vs.serviceId) {
-        const sIdStr = vs.serviceId._id ? vs.serviceId._id.toString() : vs.serviceId.toString();
-        vsMapByServiceId.set(sIdStr, vs);
-      }
-    }
-    bookingJson.serviceIds = bookingJson.serviceIds.map((s) => {
-      let sObj = { _id: s };
-      if (typeof s === 'object' && s !== null) {
-        sObj = s.toJSON ? s.toJSON() : { ...s };
-      }
-      const sIdStr = sObj._id ? sObj._id.toString() : sObj.toString();
-      const matchedVs = vsMapByServiceId.get(sIdStr);
-
-      if (matchedVs) {
-        if (sObj.price === undefined || sObj.price === null) {
-          sObj.price = matchedVs.price !== undefined && matchedVs.price !== null ? matchedVs.price : 0;
-        }
-        if (!sObj.pricingType) {
-          sObj.pricingType = matchedVs.pricingType || 'fixed';
-        }
-        if (!sObj.vendorServiceId) {
-          sObj.vendorServiceId = matchedVs._id;
-        }
-      }
-      return sObj;
-    });
-  }
-
-  const customerDoc = booking.customerId || {};
-  const customerName = customerDoc.fullName || customerDoc.name || addressObj.receiverName || 'Customer';
-
-  const serviceNamesList = serviceDetails.map((s) => s.rawTitle || s.title);
-  const primaryServiceName = serviceNamesList.length > 0 ? serviceNamesList.join(', ') : 'Quick Service';
-  const distanceText = distanceKm !== null ? `${distanceKm} km` : null;
-
-  // Attach directly to bookingJson
-  bookingJson.customerName = customerName;
-  bookingJson.customer = {
-    id: customerDoc._id || booking.customerId,
-    name: customerDoc.name || customerName,
-    fullName: customerDoc.fullName || customerName,
-    mobileNumber: customerDoc.mobileNumber || addressObj.receiverMobile,
-    email: customerDoc.email,
-    profileImage: customerDoc.profileImage || customerDoc.profilePic || null,
-  };
-  bookingJson.addressId = addressObj && typeof addressObj === 'object' && addressObj._id ? addressObj : booking.addressId;
-  bookingJson.formattedAddress = formattedCustomerAddress;
-  bookingJson.address = addressObj;
-  bookingJson.customerAddress = addressObj;
-  bookingJson.serviceName = primaryServiceName;
-  bookingJson.serviceNames = serviceNamesList;
-  bookingJson.distanceInKm = distanceKm;
-  bookingJson.distanceKm = distanceKm;
-  bookingJson.distanceText = distanceText;
-  bookingJson.distance = distanceKm;
-
-  const bookingSummary = {
-    bookingId: booking.bookingId,
-    _id: booking._id,
-    status: booking.status,
-    paymentStatus: booking.paymentStatus || 'panding',
-    customerName,
-    customer: {
-      id: customerDoc._id || booking.customerId,
-      name: customerDoc.name || customerName,
-      fullName: customerDoc.fullName || customerName,
-      mobileNumber: customerDoc.mobileNumber || addressObj.receiverMobile,
-      email: customerDoc.email,
-      profileImage: customerDoc.profileImage || customerDoc.profilePic || null,
-    },
-    serviceName: primaryServiceName,
-    serviceNames: serviceNamesList,
-    distanceInKm: distanceKm,
-    distanceKm,
-    distanceText,
-    distance: distanceKm,
-    vendor: {
-      vendorId: vendorUserObj._id,
-      businessName: vendorName,
-      rating: vendorRating,
-      totalReviews: vendorTotalReviews,
-      isVerified: vendorIsVerified,
-      location: vendorLocation,
-      profilePic: vendorProfilePic,
-      profileImage: vendorProfilePic,
-      category: vendorUserObj.categoryId ? vendorUserObj.categoryId.name || vendorUserObj.categoryId.title : null,
-      businessAddress: vendorBusinessAddress,
-      vendorAvailability,
-    },
-    businessAddress: vendorBusinessAddress,
-    vendorAvailability,
-    appointment: {
-      bookingType: booking.bookingType || 'schedule',
-      bookingDate: booking.bookingDate,
-      bookingTime: booking.bookingTime || 'Select Day & Time',
-      timeSlot: booking.timeSlot || booking.bookingTime,
-      estimatedArrival: booking.estimatedArrival,
-      serviceStartTime: booking.serviceStartTime,
-      serviceEndTime: booking.serviceEndTime,
-    },
-    customerAddress: {
-      addressId: addressObj._id,
-      address: addressObj.address,
-      floor: addressObj.floor,
-      landmark: addressObj.landmark,
-      locationType: addressObj.locationType,
-      receiverName: addressObj.receiverName,
-      receiverMobile: addressObj.receiverMobile,
-      location: addressObj.location,
-      displayAddress: formattedCustomerAddress,
-    },
-    address: formattedCustomerAddress,
-    priceBreakdown: {
-      services: serviceDetails,
-      servicesTotal: calculatedServicesTotal,
-      visitingCharge,
-      subtotal,
-      serviceFee,
-      serviceFeePercentage: '5%',
-      tax,
-      taxPercentage: '5%',
-      totalPayable,
-    },
-    notes: booking.notes,
-    createdAt: booking.createdAt,
-    updatedAt: booking.updatedAt,
-  };
-
-  return {
-    booking: bookingJson,
-    bookingSummary,
-    businessAddress: vendorBusinessAddress,
-    vendorAvailability,
-  };
-}
-
-export async function getOne(query, options = {}) {
-  let bookingQuery = Bookings.findOne(query, options.projection, options);
-  if (!options.populate) {
-    bookingQuery = bookingQuery
-      .populate({
-        path: 'vendorId',
-        populate: [
-          {
-            path: 'userId',
-            select: 'name fullName email mobileNumber profileImage profilePic userProfilePic location images',
-          },
-          { path: 'categoryId', select: 'name title image' },
-        ],
-      })
-      .populate('customerId', 'name fullName email mobileNumber profileImage profilePic userProfilePic')
-      .populate('addressId')
-      .populate('vendorServiceId')
-      .populate('serviceIds');
-  }
-  const booking = await bookingQuery;
-  if (!booking) {
-    return booking;
-  }
-
-  let vendorBusinessAddress = null;
-  if (booking.vendorId) {
-    let vendorUserId = (booking.vendorId.userId && booking.vendorId.userId._id) || booking.vendorId.userId;
-    if (!vendorUserId && typeof booking.vendorId === 'string') {
-      const vendorDoc = await VendorUser.findById(booking.vendorId);
-      if (vendorDoc) {
-        vendorUserId = vendorDoc.userId;
-      }
-    }
-    const possibleUserIds = [
-      vendorUserId,
-      booking.vendorId._id || booking.vendorId,
-      booking.vendorId.userId && (booking.vendorId.userId._id || booking.vendorId.userId),
-    ].filter(Boolean);
-    vendorBusinessAddress = await BusinessAddress.findOne({
-      $or: [{ userId: { $in: possibleUserIds } }, { createdBy: { $in: possibleUserIds } }],
-      isDeleted: { $ne: true },
-    });
-  }
-
-  let vendorAvailability = null;
-  if (booking.vendorId) {
-    const vId = booking.vendorId._id || booking.vendorId;
-    const va = await VendorAvailability.findOne({ vendorId: vId, isDeleted: { $ne: true } });
-    if (va) {
-      const dayNames = ['sunday', 'monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday'];
-      const todayDayName = dayNames[new Date().getDay()];
-
-      const isOnline = va.isOnline !== undefined ? Boolean(va.isOnline) : true;
-      const storeStatus = va.storeStatus || (isOnline ? 'online' : 'offline');
-      const vendorBookingOption = va.bookingOption || 'instant';
-      const instantArrivalEstimate = va.instantArrivalEstimate || '30-40 mins';
-
-      let isOpenToday = true;
-      if (va.weeklySchedule && Array.isArray(va.weeklySchedule)) {
-        const todaySchedule = va.weeklySchedule.find((s) => s.day && s.day.toLowerCase() === todayDayName);
-        if (todaySchedule) {
-          isOpenToday = Boolean(todaySchedule.isOpen);
-        }
-      }
-
-      const isAvailable = isOnline && isOpenToday;
-
-      let statusText = 'Available';
-      let statusBadge = 'available';
-
-      if (!isOnline) {
-        statusText = 'Currently Unavailable';
-        statusBadge = 'offline';
-      } else if (!isOpenToday) {
-        statusText = 'Closed Today';
-        statusBadge = 'closed';
-      } else if (vendorBookingOption === 'instant') {
-        statusText = `Arriving in ${instantArrivalEstimate}`;
-        statusBadge = 'instant';
-      } else {
-        statusText = 'Open for Schedule';
-        statusBadge = 'schedule';
-      }
-
-      vendorAvailability = {
-        isOnline,
-        storeStatus,
-        isOpenToday,
-        isAvailable,
-        statusText,
-        statusBadge,
-        bookingOption: vendorBookingOption,
-        instantArrivalEstimate,
-      };
-
-      const currentBookingType = booking.bookingType || vendorBookingOption;
-      if (currentBookingType === 'schedule' || currentBookingType === 'SCHEDULE' || vendorBookingOption === 'schedule') {
-        vendorAvailability.weeklySchedule = va.weeklySchedule || [];
-      }
-    }
-  }
-
-  let bookingJson = booking;
-  if (typeof booking.toJSON === 'function') {
-    bookingJson = booking.toJSON();
-  } else if (typeof booking.toObject === 'function') {
-    bookingJson = booking.toObject();
-  } else {
-    bookingJson = { ...booking };
-  }
-
-  if (vendorBusinessAddress) {
-    bookingJson.businessAddress = vendorBusinessAddress;
-    if (bookingJson.vendorId && typeof bookingJson.vendorId === 'object') {
-      bookingJson.vendorId.businessAddress = vendorBusinessAddress;
-    }
-  }
-
-  if (vendorAvailability) {
-    bookingJson.vendorAvailability = vendorAvailability;
-    if (bookingJson.vendorId && typeof bookingJson.vendorId === 'object') {
-      bookingJson.vendorId.vendorAvailability = vendorAvailability;
-    }
-  }
-
-  // Attach price, pricingType, and vendorServiceId to serviceIds items in getOne
-  if (booking.vendorId && booking.serviceIds && Array.isArray(booking.serviceIds) && booking.serviceIds.length > 0) {
-    const sIds = booking.serviceIds.map((s) => (s._id ? s._id : s));
-    const vId = booking.vendorId._id || booking.vendorId;
-    const vendorServicesList = await VendorService.find({
-      vendorId: vId,
-      serviceId: { $in: sIds },
-      isDeleted: { $ne: true },
-    });
-    const vsMapByServiceId = new Map();
-    // eslint-disable-next-line no-restricted-syntax
-    for (const vs of vendorServicesList) {
-      if (vs.serviceId) {
-        const sIdStr = vs.serviceId._id ? vs.serviceId._id.toString() : vs.serviceId.toString();
-        vsMapByServiceId.set(sIdStr, vs);
-      }
-    }
-    if (bookingJson.serviceIds && Array.isArray(bookingJson.serviceIds)) {
-      bookingJson.serviceIds = bookingJson.serviceIds.map((s) => {
-        let sObj = { _id: s };
-        if (typeof s === 'object' && s !== null) {
-          sObj = s.toJSON ? s.toJSON() : { ...s };
-        }
-        const sIdStr = sObj._id ? sObj._id.toString() : sObj.toString();
-        const matchedVs = vsMapByServiceId.get(sIdStr);
-
-        if (matchedVs) {
-          if (sObj.price === undefined || sObj.price === null) {
-            sObj.price = matchedVs.price !== undefined && matchedVs.price !== null ? matchedVs.price : 0;
-          }
-          if (!sObj.pricingType) {
-            sObj.pricingType = matchedVs.pricingType || 'fixed';
-          }
-          if (!sObj.vendorServiceId) {
-            sObj.vendorServiceId = matchedVs._id;
-          }
-        }
-        return sObj;
-      });
-    }
-  }
-
-  // eslint-disable-next-line no-use-before-define
-  return enrichBookingWithDetails(bookingJson);
-}
-
 export const defaultBookingPopulate = [
   {
     path: 'vendorId',
@@ -778,29 +93,13 @@ export function enrichBookingWithDetails(booking) {
   const vendorObj = b.vendorId || {};
   const vendorUserAccount = (vendorObj && typeof vendorObj === 'object' && vendorObj.userId) || {};
 
-  // 1. Customer Name & Object
-  const customerName = customer.fullName || customer.name || address.receiverName || 'Customer';
+  // 1. Customer Name
+  const customerName =
+    (typeof customer === 'object' && customer !== null && (customer.fullName || customer.name)) ||
+    (typeof address === 'object' && address !== null && address.receiverName) ||
+    '';
 
-  // 2. Formatted Address
-  let formattedAddress = null;
-  if (typeof address === 'object' && address !== null && address.address) {
-    const parts = [
-      address.houseNumber,
-      address.floor,
-      address.address,
-      address.landmark,
-      address.city,
-      address.state,
-    ].filter(Boolean);
-    formattedAddress = parts.join(', ');
-    if (address.pinCode) {
-      formattedAddress += ` - ${address.pinCode}`;
-    }
-  } else if (typeof address === 'string') {
-    formattedAddress = address;
-  }
-
-  // 3. Service Name & Names List
+  // 2. Service Name
   const serviceNameList = [];
   if (b.serviceIds && Array.isArray(b.serviceIds) && b.serviceIds.length > 0) {
     // eslint-disable-next-line no-restricted-syntax
@@ -829,9 +128,9 @@ export function enrichBookingWithDetails(booking) {
     }
   }
 
-  const serviceName = serviceNameList.length > 0 ? serviceNameList.join(', ') : 'Quick Service';
+  const serviceName = serviceNameList.length > 0 ? serviceNameList.join(', ') : b.serviceName || '';
 
-  // 4. Coordinates & Distance in km
+  // 3. Distance in km
   let lat1 = null;
   let lon1 = null;
   if (
@@ -878,48 +177,22 @@ export function enrichBookingWithDetails(booking) {
     distanceInKm = calculateDistanceInKm(lat1, lon1, lat2, lon2);
   }
 
-  const distanceText = distanceInKm !== null ? `${distanceInKm} km` : null;
+  // Address ID only from real populated database object (null if no DB address)
+  const populatedAddress = typeof address === 'object' && address !== null && address._id ? address : b.addressId || null;
+  const timeSlot = b.timeSlot || b.bookingTime || '';
 
-  b.customerName = customerName;
-  b.customer = {
-    id: customer._id || b.customerId,
-    name: customer.name || customerName,
-    fullName: customer.fullName || customerName,
-    mobileNumber: customer.mobileNumber || address.receiverMobile,
-    email: customer.email,
-    profileImage: customer.profileImage || customer.profilePic || null,
+  return {
+    customerName,
+    serviceName,
+    totalAmount: b.totalAmount !== undefined && b.totalAmount !== null ? b.totalAmount : b.subtotal || 0,
+    distanceInKm,
+    addressId: populatedAddress,
+    timeSlot,
+    status: b.status,
+    cancelReason: b.cancelReason || null,
+    bookingId: b.bookingId,
+    _id: b._id,
   };
-  b.addressId = typeof address === 'object' && address !== null && address._id ? address : b.addressId;
-  b.address = typeof address === 'object' && address !== null && address._id ? address : formattedAddress;
-  b.customerAddress =
-    typeof address === 'object' && address !== null && address._id
-      ? {
-          addressId: address._id,
-          address: address.address,
-          floor: address.floor,
-          houseNumber: address.houseNumber,
-          city: address.city,
-          state: address.state,
-          pinCode: address.pinCode,
-          landmark: address.landmark,
-          locationType: address.locationType,
-          receiverName: address.receiverName,
-          receiverMobile: address.receiverMobile,
-          location: address.location,
-          latitude: address.latitude,
-          longitude: address.longitude,
-          displayAddress: formattedAddress,
-        }
-      : null;
-  b.formattedAddress = formattedAddress;
-  b.serviceName = serviceName;
-  b.serviceNames = serviceNameList;
-  b.distanceInKm = distanceInKm;
-  b.distanceKm = distanceInKm;
-  b.distanceText = distanceText;
-  b.distance = distanceInKm;
-
-  return b;
 }
 
 export async function populateMissingAddresses(bookings) {
@@ -978,6 +251,71 @@ export async function populateMissingAddresses(bookings) {
   }
 
   return bookings;
+}
+
+export async function getBookingSummaryDetails(identifier) {
+  let filter = {};
+  if (typeof identifier === 'object' && identifier !== null && !Array.isArray(identifier)) {
+    filter = identifier;
+  } else if (mongoose.Types.ObjectId.isValid(identifier)) {
+    filter = { $or: [{ _id: identifier }, { bookingId: identifier }] };
+  } else {
+    filter = { bookingId: identifier };
+  }
+
+  const booking = await Bookings.findOne(filter)
+    .populate({
+      path: 'vendorId',
+      populate: [
+        {
+          path: 'userId',
+          select: 'name fullName email mobileNumber profileImage profilePic userProfilePic location images',
+        },
+        { path: 'categoryId', select: 'name title image' },
+      ],
+    })
+    .populate('customerId', 'name fullName email mobileNumber profileImage profilePic userProfilePic')
+    .populate('addressId')
+    .populate('vendorServiceId')
+    .populate('serviceIds');
+
+  if (!booking) {
+    throw new ApiError(httpStatus.NOT_FOUND, 'Booking not found');
+  }
+
+  // Ensure addressId is populated / fallback to customer default address
+  let resolvedAddress = booking.addressId;
+  if (!resolvedAddress && booking.customerId) {
+    const cId = booking.customerId._id || booking.customerId;
+    resolvedAddress =
+      (await Address.findOne({ userId: cId, isDefault: true, isDeleted: { $ne: true } })) ||
+      (await Address.findOne({ userId: cId, isDeleted: { $ne: true } }));
+  } else if (resolvedAddress && typeof resolvedAddress === 'object' && !resolvedAddress.address) {
+    const directAddr = await Address.findById(resolvedAddress._id || resolvedAddress);
+    if (directAddr) {
+      resolvedAddress = directAddr;
+    }
+  } else if (resolvedAddress && (typeof resolvedAddress === 'string' || mongoose.Types.ObjectId.isValid(resolvedAddress))) {
+    const directAddr = await Address.findById(resolvedAddress);
+    if (directAddr) {
+      resolvedAddress = directAddr;
+    }
+  }
+  booking.addressId = resolvedAddress;
+
+  return enrichBookingWithDetails(booking);
+}
+
+export async function getOne(query, options = {}) {
+  let bookingQuery = Bookings.findOne(query, options.projection, options);
+  if (!options.populate) {
+    bookingQuery = bookingQuery.populate(defaultBookingPopulate);
+  }
+  const booking = await bookingQuery;
+  if (!booking) {
+    return booking;
+  }
+  return enrichBookingWithDetails(booking);
 }
 
 export function buildBookingStatusFilter(status) {
