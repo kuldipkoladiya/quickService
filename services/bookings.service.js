@@ -200,6 +200,7 @@ export function enrichBookingWithDetails(booking) {
   // Address ID only from real populated database object (null if no DB address)
   const populatedAddress = typeof address === 'object' && address !== null && address._id ? address : b.addressId || null;
   const timeSlot = b.timeSlot || b.bookingTime || (b.createdAt ? formatTime(b.createdAt) : formatTime(new Date()));
+  const bookingDate = b.bookingDate || b.createdAt || null;
 
   return {
     customerName,
@@ -207,6 +208,7 @@ export function enrichBookingWithDetails(booking) {
     totalAmount: b.totalAmount !== undefined && b.totalAmount !== null ? b.totalAmount : b.subtotal || 0,
     distanceInKm,
     addressId: populatedAddress,
+    bookingDate,
     timeSlot,
     status: b.status,
     cancelReason: b.cancelReason || null,
