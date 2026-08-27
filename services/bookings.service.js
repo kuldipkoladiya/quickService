@@ -215,7 +215,18 @@ export function enrichBookingWithDetails(booking) {
   }
   const timeSlot = b.timeSlot || b.bookingTime || formatTime(bookingDate);
 
+  // Extract MongoDB ID reliably even when toJSON transforms _id to id
+  const mongoId =
+    (b._id && b._id.toString()) ||
+    (b.id && b.id.toString()) ||
+    (booking && booking._id && booking._id.toString()) ||
+    (booking && booking.id && booking.id.toString()) ||
+    null;
+
   return {
+    _id: mongoId,
+    id: mongoId,
+    bookingId: b.bookingId,
     customerName,
     serviceName,
     totalAmount: b.totalAmount !== undefined && b.totalAmount !== null ? b.totalAmount : b.subtotal || 0,
@@ -225,8 +236,6 @@ export function enrichBookingWithDetails(booking) {
     timeSlot,
     status: b.status,
     cancelReason: b.cancelReason || null,
-    bookingId: b.bookingId,
-    _id: b._id,
   };
 }
 
