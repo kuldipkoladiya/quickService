@@ -101,34 +101,56 @@ export const defaultBookingPopulate = [
 export function extractProfilePic(userOrVendor) {
   if (!userOrVendor || typeof userOrVendor !== 'object') return null;
 
-  if (typeof userOrVendor.profileImage === 'string' && userOrVendor.profileImage.trim().length > 0) {
-    return userOrVendor.profileImage.trim();
-  }
+  // 1. Current active profilePic field (e.g. hapmeet-user-images)
   if (typeof userOrVendor.profilePic === 'string' && userOrVendor.profilePic.trim().length > 0) {
     return userOrVendor.profilePic.trim();
   }
+
+  // 2. Latest active userProfilePic array entry
   if (Array.isArray(userOrVendor.userProfilePic) && userOrVendor.userProfilePic.length > 0) {
-    // eslint-disable-next-line no-restricted-syntax
-    for (const p of userOrVendor.userProfilePic) {
-      if (p && typeof p.url === 'string' && p.url.trim().length > 0) {
-        return p.url.trim();
-      }
-      if (typeof p === 'string' && p.trim().length > 0) {
-        return p.trim();
+    for (let i = userOrVendor.userProfilePic.length - 1; i >= 0; i -= 1) {
+      const p = userOrVendor.userProfilePic[i];
+      if (p) {
+        if (typeof p === 'string' && p.trim().length > 0) {
+          return p.trim();
+        }
+        if (typeof p === 'object') {
+          if (!p.isDeleted && !p.deleted && typeof p.url === 'string' && p.url.trim().length > 0) {
+            return p.url.trim();
+          }
+          if (typeof p.url === 'string' && p.url.trim().length > 0) {
+            return p.url.trim();
+          }
+        }
       }
     }
   }
+
+  // 3. Latest active images array entry
   if (Array.isArray(userOrVendor.images) && userOrVendor.images.length > 0) {
-    // eslint-disable-next-line no-restricted-syntax
-    for (const img of userOrVendor.images) {
-      if (img && typeof img.url === 'string' && img.url.trim().length > 0) {
-        return img.url.trim();
-      }
-      if (typeof img === 'string' && img.trim().length > 0) {
-        return img.trim();
+    for (let i = userOrVendor.images.length - 1; i >= 0; i -= 1) {
+      const img = userOrVendor.images[i];
+      if (img) {
+        if (typeof img === 'string' && img.trim().length > 0) {
+          return img.trim();
+        }
+        if (typeof img === 'object') {
+          if (!img.isDeleted && !img.deleted && typeof img.url === 'string' && img.url.trim().length > 0) {
+            return img.url.trim();
+          }
+          if (typeof img.url === 'string' && img.url.trim().length > 0) {
+            return img.url.trim();
+          }
+        }
       }
     }
   }
+
+  // 4. Fallback to profileImage field
+  if (typeof userOrVendor.profileImage === 'string' && userOrVendor.profileImage.trim().length > 0) {
+    return userOrVendor.profileImage.trim();
+  }
+
   return null;
 }
 
