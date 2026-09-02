@@ -94,6 +94,7 @@ export async function addDeviceToken(user, body) {
   if (!deviceToken) {
     return user;
   }
+  const normalizedPlatform = (platform || 'android').toLowerCase();
   const isFCMValid = await notificationService.verifyFCMToken(deviceToken);
   if (!isFCMValid) {
     throw new ApiError(httpStatus.BAD_REQUEST, 'The FCM Token is invalid!');
@@ -104,8 +105,8 @@ export async function addDeviceToken(user, body) {
 
   if (existingTokenIndex !== -1) {
     // Update platform if changed
-    if (platform && existingTokens[existingTokenIndex].platform !== platform) {
-      existingTokens[existingTokenIndex].platform = platform;
+    if (normalizedPlatform && existingTokens[existingTokenIndex].platform !== normalizedPlatform) {
+      existingTokens[existingTokenIndex].platform = normalizedPlatform;
       await User.updateOne({ _id: user._id }, { $set: { deviceTokens: existingTokens } });
     }
     return getOne({ _id: user._id });
@@ -116,7 +117,7 @@ export async function addDeviceToken(user, body) {
     { _id: user._id },
     {
       $addToSet: {
-        deviceTokens: { deviceToken, platform },
+        deviceTokens: { deviceToken, platform: normalizedPlatform },
       },
     }
   );

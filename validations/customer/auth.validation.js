@@ -8,17 +8,23 @@ import config from '../../config/config';
 
 Joi.objectId = require('joi-objectid')(Joi);
 
+const platformValidation = Joi.string()
+  .valid(...Object.values(enumFields.EnumPlatformOfDeviceToken), 'android', 'ios', 'web', 'ANDROID', 'IOS', 'WEB')
+  .optional();
+
 export const registerCustomer = {
   body: Joi.object()
     .keys({
-      email: Joi.string().email().optional(), // Optional, but should be a valid email if provided
+      email: Joi.string().email().optional(),
       password: Joi.string(),
-      name: Joi.string(), // Name is required
+      name: Joi.string(),
       mobileNumber: Joi.string()
         .pattern(/^[0-9]{10,15}$/)
-        .optional(), // Optional, but should be valid if provided (between 10-15 digits)
-      userUniqueId: Joi.string().optional(), // Optional field
+        .optional(),
+      userUniqueId: Joi.string().optional(),
       countryCodeId: Joi.objectId().optional(),
+      deviceToken: Joi.string().allow('').optional(),
+      platform: platformValidation,
     })
     .xor('email', 'mobileNumber'),
 };
@@ -31,9 +37,12 @@ export const register = {
       email: Joi.string().email(),
       mobileNumber: Joi.number(),
       countryCodeId: Joi.string().optional(),
+      deviceToken: Joi.string().allow('').optional(),
+      platform: platformValidation,
     })
     .or('email', 'mobileNumber'),
 };
+
 export const login = {
   body: Joi.object().keys({
     email: Joi.string().email().optional(),
@@ -42,7 +51,8 @@ export const login = {
       .optional(),
     countryCodeId: Joi.objectId().optional(),
     password: Joi.string().required(),
-    deviceToken: Joi.string().allow(''),
+    deviceToken: Joi.string().allow('').optional(),
+    platform: platformValidation,
     role: Joi.string()
       .valid(...Object.values(enumFields.EnumRoleOfUser))
       .optional(),
@@ -65,11 +75,12 @@ export const verifyOtp = {
   body: Joi.object()
     .keys({
       email: Joi.string().email(),
-      mobileNumber: Joi.string().pattern(/^\d+$/), // Allow only digits
+      mobileNumber: Joi.string().pattern(/^\d+$/),
       otp: Joi.number().required(),
-      deviceToken: Joi.string().allow(''),
+      deviceToken: Joi.string().allow('').optional(),
+      platform: platformValidation,
     })
-    .or('email', 'mobileNumber') // At least one is required
+    .or('email', 'mobileNumber')
     .messages({
       'object.missing': 'Please provide either email or mobileNumber to verify OTP',
     }),
@@ -143,41 +154,45 @@ export const refreshTokens = {
 export const logout = {
   body: Joi.object().keys({
     refreshToken: Joi.string().required(),
-    deviceToken: Joi.string(),
+    deviceToken: Joi.string().allow('').optional(),
   }),
 };
 
 export const googleLogin = {
   body: Joi.object().keys({
     access_token: Joi.string().required(),
+    deviceToken: Joi.string().allow('').optional(),
+    platform: platformValidation,
   }),
 };
 
 export const faceBookLogin = {
   body: Joi.object().keys({
     access_token: Joi.string().required(),
+    deviceToken: Joi.string().allow('').optional(),
+    platform: platformValidation,
   }),
 };
 
 export const appleLogin = {
   body: Joi.object().keys({
     access_token: Joi.string().required(),
+    deviceToken: Joi.string().allow('').optional(),
+    platform: platformValidation,
   }),
 };
 
 export const createDeviceToken = {
   body: Joi.object().keys({
-    deviceToken: Joi.string(),
-    platform: Joi.string().valid(...Object.values(enumFields.EnumPlatformOfDeviceToken)),
+    deviceToken: Joi.string().required(),
+    platform: platformValidation,
   }),
 };
 
 export const updateDeviceToken = {
   body: Joi.object().keys({
     deviceToken: Joi.string().required(),
-    platform: Joi.string()
-      .valid(...Object.values(enumFields.EnumPlatformOfDeviceToken))
-      .optional(),
+    platform: platformValidation,
   }),
 };
 
