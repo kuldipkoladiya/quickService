@@ -149,8 +149,17 @@ export function enrichBookingWithDetails(booking) {
 
   const customer = b.customerId && typeof b.customerId === 'object' ? b.customerId : {};
   const address = b.addressId && typeof b.addressId === 'object' ? b.addressId : {};
-  const vendorObj = b.vendorId && typeof b.vendorId === 'object' ? b.vendorId : {};
-  const vendorUserAccount = vendorObj.userId && typeof vendorObj.userId === 'object' ? vendorObj.userId : {};
+  const vendorObj = b._resolvedVendorUser || (b.vendorId && typeof b.vendorId === 'object' ? b.vendorId : {});
+  let vendorUserAccount = b._resolvedUser || null;
+  if (!vendorUserAccount) {
+    if (vendorObj.userId && typeof vendorObj.userId === 'object') {
+      vendorUserAccount = vendorObj.userId;
+    } else if (b.vendorId && typeof b.vendorId === 'object' && b.vendorId.role === 'vendor') {
+      vendorUserAccount = b.vendorId;
+    } else {
+      vendorUserAccount = {};
+    }
+  }
 
   // 1. Customer Name
   const customerName = customer.fullName || customer.name || address.receiverName || '';
@@ -343,6 +352,113 @@ export function enrichBookingWithDetails(booking) {
   };
 }
 
+export async function populateVendorUsers(bookings) {
+  if (!bookings || !Array.isArray(bookings) || bookings.length === 0) return bookings;
+
+  try {
+    const vendorUserIdsToFetch = [];
+    const userIdsToFetch = [];
+
+    // eslint-disable-next-line no-restricted-syntax
+    for (const b of bookings) {
+      if (b && b.vendorId) {
+        const v = b.vendorId;
+        if (typeof v === 'object') {
+          if (v.userId) {
+            const uId = v.userId._id || v.userId;
+            if (uId) {
+              const uIdStr = uId.toString();
+              if (mongoose.Types.ObjectId.isValid(uIdStr) && !userIdsToFetch.includes(uIdStr)) {
+                userIdsToFetch.push(uIdStr);
+              }
+            }
+          }
+          if (v._id) {
+            const vIdStr = v._id.toString();
+            if (mongoose.Types.ObjectId.isValid(vIdStr)) {
+              if (!vendorUserIdsToFetch.includes(vIdStr)) vendorUserIdsToFetch.push(vIdStr);
+              if (!userIdsToFetch.includes(vIdStr)) userIdsToFetch.push(vIdStr);
+            }
+          }
+        } else if (typeof v === 'string' || mongoose.Types.ObjectId.isValid(v)) {
+          const vIdStr = v.toString();
+          if (!vendorUserIdsToFetch.includes(vIdStr)) vendorUserIdsToFetch.push(vIdStr);
+          if (!userIdsToFetch.includes(vIdStr)) userIdsToFetch.push(vIdStr);
+        }
+      }
+    }
+
+    const vendorUserMap = new Map();
+    if (vendorUserIdsToFetch.length > 0) {
+      const foundVendorUsers = await VendorUser.find({ _id: { $in: vendorUserIdsToFetch } }).lean();
+      // eslint-disable-next-line no-restricted-syntax
+      for (const vu of foundVendorUsers) {
+        if (vu && vu._id) {
+          vendorUserMap.set(vu._id.toString(), vu);
+          if (vu.userId) {
+            const uIdStr = (vu.userId._id || vu.userId).toString();
+            if (mongoose.Types.ObjectId.isValid(uIdStr) && !userIdsToFetch.includes(uIdStr)) {
+              userIdsToFetch.push(uIdStr);
+            }
+          }
+        }
+      }
+    }
+
+    const userMap = new Map();
+    if (userIdsToFetch.length > 0) {
+      const foundUsers = await User.find({ _id: { $in: userIdsToFetch } }).lean();
+      // eslint-disable-next-line no-restricted-syntax
+      for (const u of foundUsers) {
+        if (u && u._id) {
+          userMap.set(u._id.toString(), u);
+        }
+      }
+    }
+
+    // eslint-disable-next-line no-restricted-syntax
+    for (const b of bookings) {
+      if (b && b.vendorId) {
+        const vObj = b.vendorId;
+        let vIdStr = null;
+        if (vObj && vObj._id) {
+          vIdStr = vObj._id.toString();
+        } else if (vObj && vObj.toString) {
+          vIdStr = vObj.toString();
+        }
+
+        let resolvedVendorUser = null;
+        if (vObj && typeof vObj === 'object' && vObj.businessName !== undefined) {
+          resolvedVendorUser = vObj;
+        } else if (vIdStr && vendorUserMap.has(vIdStr)) {
+          resolvedVendorUser = vendorUserMap.get(vIdStr);
+        }
+
+        let uIdStr = null;
+        if (resolvedVendorUser && resolvedVendorUser.userId) {
+          uIdStr = (resolvedVendorUser.userId._id || resolvedVendorUser.userId).toString();
+        } else if (vIdStr && userMap.has(vIdStr)) {
+          uIdStr = vIdStr;
+        }
+
+        let resolvedUser = null;
+        if (uIdStr && userMap.has(uIdStr)) {
+          resolvedUser = userMap.get(uIdStr);
+        } else if (vObj && vObj.userId && typeof vObj.userId === 'object') {
+          resolvedUser = vObj.userId;
+        }
+
+        b._resolvedVendorUser = resolvedVendorUser;
+        b._resolvedUser = resolvedUser;
+      }
+    }
+  } catch (err) {
+    // Ignore vendor population errors and continue
+  }
+
+  return bookings;
+}
+
 export async function populateMissingAddresses(bookings) {
   if (!bookings || !Array.isArray(bookings) || bookings.length === 0) return bookings;
 
@@ -460,7 +576,8 @@ export async function getBookingSummaryDetails(identifier) {
   }
   booking.addressId = resolvedAddress;
 
-  return enrichBookingWithDetails(booking);
+  const populatedList = await populateVendorUsers([booking]);
+  return enrichBookingWithDetails(populatedList[0]);
 }
 
 export async function getOne(query, options = {}) {
@@ -472,7 +589,8 @@ export async function getOne(query, options = {}) {
   if (!booking) {
     return booking;
   }
-  return enrichBookingWithDetails(booking);
+  const populatedList = await populateVendorUsers([booking]);
+  return enrichBookingWithDetails(populatedList[0]);
 }
 
 export function buildBookingStatusFilter(status) {
@@ -521,6 +639,7 @@ export async function getBookingsList(filter, options = {}) {
 
   let bookings = await query;
   bookings = await populateMissingAddresses(bookings);
+  bookings = await populateVendorUsers(bookings);
   return bookings.map((b) => enrichBookingWithDetails(b));
 }
 
@@ -543,7 +662,8 @@ export async function getBookingsListWithPagination(filter, options = {}) {
   ]);
 
   const totalPages = Math.ceil(totalResults / limit) || 1;
-  const populatedDocs = await populateMissingAddresses(rawDocs);
+  let populatedDocs = await populateMissingAddresses(rawDocs);
+  populatedDocs = await populateVendorUsers(populatedDocs);
   const enrichedResults = populatedDocs.map((b) => enrichBookingWithDetails(b));
 
   return {
