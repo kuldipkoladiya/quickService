@@ -521,9 +521,14 @@ export async function getBookingsListWithPagination(filter, options = {}) {
     ...options,
   };
   const bookings = await Bookings.paginate(filter, paginateOptions);
-  if (bookings && Array.isArray(bookings.docs)) {
-    bookings.docs = await populateMissingAddresses(bookings.docs);
-    bookings.docs = bookings.docs.map((b) => enrichBookingWithDetails(b));
+  if (bookings) {
+    if (Array.isArray(bookings.results)) {
+      bookings.results = await populateMissingAddresses(bookings.results);
+      bookings.results = bookings.results.map((b) => enrichBookingWithDetails(b));
+    } else if (Array.isArray(bookings.docs)) {
+      bookings.docs = await populateMissingAddresses(bookings.docs);
+      bookings.docs = bookings.docs.map((b) => enrichBookingWithDetails(b));
+    }
   }
   return bookings;
 }
