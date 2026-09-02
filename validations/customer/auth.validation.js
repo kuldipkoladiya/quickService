@@ -175,6 +175,15 @@ export const createDeviceToken = {
 export const updateDeviceToken = {
   body: Joi.object().keys({
     deviceToken: Joi.string().required(),
+    platform: Joi.string()
+      .valid(...Object.values(enumFields.EnumPlatformOfDeviceToken))
+      .optional(),
+  }),
+};
+
+export const removeDeviceToken = {
+  body: Joi.object().keys({
+    deviceToken: Joi.string().required(),
   }),
 };
 

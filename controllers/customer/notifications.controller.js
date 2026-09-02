@@ -3,9 +3,8 @@
  * Only fields name will be overwritten, if the field name will be changed.
  */
 import httpStatus from 'http-status';
-import { notificationsService } from 'services';
+import { notificationsService, notificationService } from 'services';
 import { catchAsync } from 'utils/catchAsync';
-import { pick } from '../../utils/pick';
 
 export const getNotifications = catchAsync(async (req, res) => {
   const { notificationsId } = req.params;
@@ -37,6 +36,21 @@ export const createNotifications = catchAsync(async (req, res) => {
   body.updatedBy = req.user._id;
   const options = {};
   const notifications = await notificationsService.createNotifications(body, options);
+
+  if (body.receiverId) {
+    notificationService
+      .sendNotificationToUser(body.receiverId, {
+        title: body.title || 'Karyaah Notification',
+        body: body.message || '',
+        data: {
+          notificationId: String(notifications._id),
+          notificationType: body.notificationType || 'GENERAL',
+          related: body.related ? String(body.related) : '',
+        },
+      })
+      .catch(() => {});
+  }
+
   return res.status(httpStatus.CREATED).send({ results: notifications });
 });
 

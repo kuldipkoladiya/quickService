@@ -3,9 +3,8 @@
  * Only fields name will be overwritten, if the field name will be changed.
  */
 import httpStatus from 'http-status';
-import { reviewsService } from 'services';
+import { reviewsService, notificationService } from 'services';
 import { catchAsync } from 'utils/catchAsync';
-import { pick } from '../../utils/pick';
 
 export const getReviews = catchAsync(async (req, res) => {
   const { reviewsId } = req.params;
@@ -37,6 +36,11 @@ export const createReviews = catchAsync(async (req, res) => {
   body.updatedBy = req.user._id;
   const options = {};
   const reviews = await reviewsService.createReviews(body, options);
+
+  if (body.vendorId) {
+    notificationService.notifyNewReview(reviews, body.vendorId, body.rating || 5, body.comment || '').catch(() => {});
+  }
+
   return res.status(httpStatus.CREATED).send({ results: reviews });
 });
 

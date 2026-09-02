@@ -6,7 +6,7 @@ import httpStatus from 'http-status';
 import mongoose from 'mongoose';
 import { User, VendorUser, BookingTracking, Bookings } from 'models';
 import { EnumStatusOfBookings } from 'models/enum.model';
-import { bookingsService, emailService } from 'services';
+import { bookingsService, emailService, notificationService } from 'services';
 import { sendOtpToMobile } from 'services/mobileotp.service';
 import { buildBookingStatusFilter } from 'services/bookings.service';
 import ApiError from 'utils/ApiError';
@@ -168,6 +168,10 @@ export const acceptBooking = catchAsync(async (req, res) => {
     // ignore tracking creation error
   }
 
+  // Notify customer of acceptance
+  const vendorName = req.user ? req.user.fullName || req.user.name || 'Vendor' : 'Vendor';
+  notificationService.notifyBookingAccepted(booking, vendorName).catch(() => {});
+
   const data = await bookingsService.getBookingSummaryDetails(booking._id);
   return res.status(httpStatus.OK).send({
     message: 'Booking accepted successfully',
@@ -205,6 +209,10 @@ export const onTheWayBooking = catchAsync(async (req, res) => {
   } catch (err) {
     // ignore tracking creation error
   }
+
+  // Notify customer that vendor is on the way
+  const vendorNameOnTheWay = req.user ? req.user.fullName || req.user.name || 'Vendor' : 'Vendor';
+  notificationService.notifyVendorOnTheWay(booking, vendorNameOnTheWay).catch(() => {});
 
   const data = await bookingsService.getBookingSummaryDetails(booking._id);
   return res.status(httpStatus.OK).send({
@@ -270,6 +278,9 @@ export const sendBookingCompletionOtp = catchAsync(async (req, res) => {
   } else {
     throw new ApiError(httpStatus.BAD_REQUEST, 'Customer does not have a registered mobile number or email');
   }
+
+  // Send push notification with completion OTP
+  notificationService.notifyServiceCompletionOtp(booking, otp).catch(() => {});
 
   const maskedNumber = customer.mobileNumber ? `******${String(customer.mobileNumber).slice(-4)}` : customer.email;
 
@@ -342,6 +353,9 @@ export const verifyBookingCompletionOtp = catchAsync(async (req, res) => {
     }
   }
 
+  // Notify both customer and vendor of completion
+  notificationService.notifyBookingCompleted(booking).catch(() => {});
+
   const data = await bookingsService.getBookingSummaryDetails(booking._id);
   return res.status(httpStatus.OK).send({
     message: 'OTP verified and booking completed successfully',
@@ -407,6 +421,9 @@ export const resendBookingCompletionOtp = catchAsync(async (req, res) => {
     throw new ApiError(httpStatus.BAD_REQUEST, 'Customer does not have a registered mobile number or email');
   }
 
+  // Send push notification with completion OTP
+  notificationService.notifyServiceCompletionOtp(booking, otp).catch(() => {});
+
   const maskedNumber = customer.mobileNumber ? `******${String(customer.mobileNumber).slice(-4)}` : customer.email;
 
   return res.status(httpStatus.OK).send({
@@ -449,6 +466,9 @@ export const cancelBooking = catchAsync(async (req, res) => {
   } catch (err) {
     // ignore tracking creation error
   }
+
+  // Dispatch cancellation notification to customer
+  notificationService.notifyBookingCancelled(booking, 'vendor', cancelReason).catch(() => {});
 
   const data = await bookingsService.getBookingSummaryDetails(booking._id);
   return res.status(httpStatus.OK).send({

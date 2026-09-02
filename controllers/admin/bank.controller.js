@@ -3,9 +3,8 @@
  * Only fields name will be overwritten, if the field name will be changed.
  */
 import httpStatus from 'http-status';
-import { bankService } from 'services';
+import { bankService, notificationService } from 'services';
 import { catchAsync } from 'utils/catchAsync';
-import { pick } from '../../utils/pick';
 
 export const getBank = catchAsync(async (req, res) => {
   const { bankId } = req.params;
@@ -49,6 +48,12 @@ export const updateBank = catchAsync(async (req, res) => {
   };
   const options = { new: true };
   const bank = await bankService.updateBank(filter, body, options);
+
+  if (body.verificationStatus && bank) {
+    const targetVendor = bank.vendorUserId || bank.userId || bank.createdBy;
+    notificationService.notifyBankStatus(targetVendor, body.verificationStatus, bank.bankName || '').catch(() => {});
+  }
+
   return res.status(httpStatus.OK).send({ results: bank });
 });
 

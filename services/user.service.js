@@ -2,7 +2,6 @@ import ApiError from 'utils/ApiError';
 import httpStatus from 'http-status';
 import { User } from 'models';
 import bcrypt from 'bcryptjs';
-import _ from 'lodash';
 import { notificationService } from './index';
 
 export async function getUserById(id, options = {}) {
@@ -91,17 +90,51 @@ export async function aggregateUserWithPagination(query, options = {}) {
 }
 
 export async function addDeviceToken(user, body) {
-  const { deviceToken, platform } = body;
+  const { deviceToken, platform = 'android' } = body;
+  if (!deviceToken) {
+    return user;
+  }
   const isFCMValid = await notificationService.verifyFCMToken(deviceToken);
   if (!isFCMValid) {
     throw new ApiError(httpStatus.BAD_REQUEST, 'The FCM Token is invalid!');
   }
-  const deviceTokenList = user.deviceTokens.map((data) => data.deviceToken);
-  if (_.indexOf(deviceTokenList, deviceToken) === -1) {
-    user.deviceTokens.push({ deviceToken, platform });
-    Object.assign(user, { password: undefined });
-    const updatedUser = await updateUser({ _id: user._id }, user, { new: true });
-    return updatedUser;
+
+  const existingTokens = user.deviceTokens || [];
+  const existingTokenIndex = existingTokens.findIndex((dt) => dt && dt.deviceToken === deviceToken);
+
+  if (existingTokenIndex !== -1) {
+    // Update platform if changed
+    if (platform && existingTokens[existingTokenIndex].platform !== platform) {
+      existingTokens[existingTokenIndex].platform = platform;
+      await User.updateOne({ _id: user._id }, { $set: { deviceTokens: existingTokens } });
+    }
+    return getOne({ _id: user._id });
   }
-  return user;
+
+  // Add new device token
+  await User.updateOne(
+    { _id: user._id },
+    {
+      $addToSet: {
+        deviceTokens: { deviceToken, platform },
+      },
+    }
+  );
+
+  return getOne({ _id: user._id });
+}
+
+export async function removeDeviceToken(user, deviceToken) {
+  if (!deviceToken || !user) {
+    return user;
+  }
+  await User.updateOne(
+    { _id: user._id },
+    {
+      $pull: {
+        deviceTokens: { deviceToken },
+      },
+    }
+  );
+  return getOne({ _id: user._id });
 }

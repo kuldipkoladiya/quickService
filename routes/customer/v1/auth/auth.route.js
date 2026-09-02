@@ -123,6 +123,10 @@ router.post(
  */
 router.post('/update-device-token', auth(), validate(authValidation.updateDeviceToken), authController.updateDeviceToken);
 /**
+ * Remove device token Api
+ */
+router.post('/remove-device-token', auth(), validate(authValidation.removeDeviceToken), authController.removeDeviceToken);
+/**
  * Logout the API for the User
  */
 router.post('/logout', auth(), validate(authValidation.logout), authController.logout);

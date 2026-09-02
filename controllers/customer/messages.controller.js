@@ -3,9 +3,9 @@
  * Only fields name will be overwritten, if the field name will be changed.
  */
 import httpStatus from 'http-status';
-import { messagesService } from 'services';
+import { Chats } from 'models';
+import { messagesService, notificationService } from 'services';
 import { catchAsync } from 'utils/catchAsync';
-import { pick } from '../../utils/pick';
 
 export const getMessages = catchAsync(async (req, res) => {
   const { messagesId } = req.params;
@@ -37,6 +37,28 @@ export const createMessages = catchAsync(async (req, res) => {
   body.updatedBy = req.user._id;
   const options = {};
   const messages = await messagesService.createMessages(body, options);
+
+  if (body.chatId) {
+    Chats.findById(body.chatId)
+      .then((chat) => {
+        if (chat) {
+          const senderId = req.user ? req.user._id : body.senderId;
+          const recipientId = String(chat.customerId) === String(senderId) ? chat.vendorId : chat.customerId;
+          const senderName = req.user ? req.user.fullName || req.user.name || 'User' : 'Someone';
+          notificationService
+            .notifyNewChatMessage({
+              recipientUserId: recipientId,
+              senderUserId: senderId,
+              senderName,
+              messageText: body.message || '',
+              chatId: body.chatId,
+            })
+            .catch(() => {});
+        }
+      })
+      .catch(() => {});
+  }
+
   return res.status(httpStatus.CREATED).send({ results: messages });
 });
 

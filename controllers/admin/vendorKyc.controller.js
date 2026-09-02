@@ -3,9 +3,8 @@
  * Only fields name will be overwritten, if the field name will be changed.
  */
 import httpStatus from 'http-status';
-import { vendorKycService } from 'services';
+import { vendorKycService, notificationService } from 'services';
 import { catchAsync } from 'utils/catchAsync';
-import { pick } from '../../utils/pick';
 
 export const getVendorKyc = catchAsync(async (req, res) => {
   const { vendorKycId } = req.params;
@@ -49,6 +48,12 @@ export const updateVendorKyc = catchAsync(async (req, res) => {
   };
   const options = { new: true };
   const vendorKyc = await vendorKycService.updateVendorKyc(filter, body, options);
+
+  if (body.status && vendorKyc) {
+    const targetVendor = vendorKyc.vendorUserId || vendorKyc.createdBy || vendorKyc.userId;
+    notificationService.notifyKycStatus(targetVendor, body.status, body.rejectReason || body.reason || '').catch(() => {});
+  }
+
   return res.status(httpStatus.OK).send({ results: vendorKyc });
 });
 

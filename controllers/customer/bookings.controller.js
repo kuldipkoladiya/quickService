@@ -6,7 +6,7 @@ import httpStatus from 'http-status';
 import mongoose from 'mongoose';
 import { BookingTracking, Bookings } from 'models';
 import { EnumStatusOfBookings } from 'models/enum.model';
-import { bookingsService } from 'services';
+import { bookingsService, notificationService } from 'services';
 import { buildBookingStatusFilter } from 'services/bookings.service';
 import ApiError from 'utils/ApiError';
 import { catchAsync } from 'utils/catchAsync';
@@ -101,6 +101,13 @@ export const createBookings = catchAsync(async (req, res) => {
   body.updatedBy = req.user._id;
   const options = {};
   const bookings = await bookingsService.createBookings(body, options);
+
+  // Dispatch push notifications asynchronously
+  notificationService.notifyBookingPlaced(bookings).catch(() => {});
+  if (bookings.vendorId) {
+    notificationService.notifyNewBookingRequest(bookings).catch(() => {});
+  }
+
   return res.status(httpStatus.CREATED).send({ results: bookings });
 });
 
@@ -179,6 +186,9 @@ export const cancelBooking = catchAsync(async (req, res) => {
   } catch (err) {
     // ignore tracking creation error
   }
+
+  // Dispatch cancellation notifications
+  notificationService.notifyBookingCancelled(booking, 'customer', cancelReason).catch(() => {});
 
   const data = await bookingsService.getBookingSummaryDetails(booking._id);
   return res.status(httpStatus.OK).send({

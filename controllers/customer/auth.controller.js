@@ -10,6 +10,7 @@ import {
   countryCodeService,
   vendorUserService,
   addressService,
+  notificationService,
 } from 'services';
 
 import { EnumTypeOfToken, EnumCodeTypeOfCode, EnumRoleOfUser } from 'models/enum.model';
@@ -245,6 +246,9 @@ export const login = catchAsync(async (req, res) => {
   });
   userJson.addresses = addresses || [];
 
+  // Dispatch welcome login push notification
+  notificationService.notifyLoginSuccess(finalUser).catch(() => {});
+
   res.status(httpStatus.OK).send({
     results: {
       user: userJson,
@@ -322,6 +326,9 @@ export const verifyOtpCustomer = catchAsync(async (req, res) => {
     locationType: { $ne: 'unlabeled' },
   });
 
+  // Dispatch welcome login push notification
+  notificationService.notifyLoginSuccess(updatedUser).catch(() => {});
+
   return res.status(httpStatus.OK).send({
     results: {
       success: true,
@@ -362,6 +369,9 @@ export const verifyOtpVendor = catchAsync(async (req, res) => {
   if (vendorUser) {
     userJson.vendorUser = vendorUser;
   }
+
+  // Dispatch welcome login push notification
+  notificationService.notifyLoginSuccess(updatedUser).catch(() => {});
 
   return res.status(httpStatus.OK).send({ results: { user: userJson, tokens, ...(vendorUser && { vendorUser }) } });
 });
@@ -519,9 +529,8 @@ export const refreshTokens = catchAsync(async (req, res) => {
 export const logout = catchAsync(async (req, res) => {
   const { user } = req;
   const { deviceToken } = req.body;
-  if (deviceToken) {
-    user.deviceTokens = user.deviceTokens.filter((token) => token !== deviceToken);
-    await user.save();
+  if (deviceToken && user) {
+    await userService.removeDeviceToken(user, deviceToken);
   }
   await tokenService.invalidateToken(req.body);
   res.status(httpStatus.OK).send({ results: { success: true } });
@@ -537,6 +546,10 @@ export const socialLogin = catchAsync(async (req, res) => {
   });
   const userJson = user.toJSON ? user.toJSON() : user;
   userJson.addresses = addresses || [];
+
+  // Dispatch welcome login push notification
+  notificationService.notifyLoginSuccess(user).catch(() => {});
+
   res.status(httpStatus.OK).send({ results: { user: userJson, token } });
 });
 
@@ -559,6 +572,20 @@ export const updateDeviceToken = catchAsync(async (req, res) => {
   } else {
     res.status(httpStatus.OK).send({ results: user });
   }
+});
+
+export const removeDeviceToken = catchAsync(async (req, res) => {
+  const { user } = req;
+  const { deviceToken } = req.body;
+  if (deviceToken && user) {
+    await userService.removeDeviceToken(user, deviceToken);
+  }
+  res.status(httpStatus.OK).send({
+    results: {
+      success: true,
+      message: 'Device token removed successfully',
+    },
+  });
 });
 
 export const verifyUpdateOtp = catchAsync(async (req, res) => {
