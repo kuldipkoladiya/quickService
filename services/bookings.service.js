@@ -490,23 +490,6 @@ export function buildBookingStatusFilter(status) {
 }
 
 export async function getBookingsList(filter, options = {}) {
-  let query = Bookings.find(filter, options.projection, options);
-  if (options.populate) {
-    query = query.populate(options.populate);
-  } else {
-    query = query.populate(defaultBookingPopulate);
-  }
-  if (options.sort) {
-    query = query.sort(options.sort);
-  } else {
-    query = query.sort({ createdAt: -1 });
-  }
-  let bookings = await query;
-  bookings = await populateMissingAddresses(bookings);
-  return bookings.map((b) => enrichBookingWithDetails(b));
-}
-
-export async function getBookingsListWithPagination(filter, options = {}) {
   let sort = { createdAt: -1 };
   if (options.sortBy) {
     const sortOrder = options.sortOrder === 'asc' || options.sortOrder === 1 ? 1 : -1;
@@ -515,22 +498,55 @@ export async function getBookingsListWithPagination(filter, options = {}) {
     sort = options.sort;
   }
 
-  const paginateOptions = {
-    sort,
-    populate: defaultBookingPopulate,
-    ...options,
-  };
-  const bookings = await Bookings.paginate(filter, paginateOptions);
-  if (bookings) {
-    if (Array.isArray(bookings.results)) {
-      bookings.results = await populateMissingAddresses(bookings.results);
-      bookings.results = bookings.results.map((b) => enrichBookingWithDetails(b));
-    } else if (Array.isArray(bookings.docs)) {
-      bookings.docs = await populateMissingAddresses(bookings.docs);
-      bookings.docs = bookings.docs.map((b) => enrichBookingWithDetails(b));
-    }
+  let query = Bookings.find(filter, options.projection, options);
+  if (options.populate) {
+    query = query.populate(options.populate);
+  } else {
+    query = query.populate(defaultBookingPopulate);
   }
-  return bookings;
+  query = query.sort(sort);
+
+  if (options.page && options.limit) {
+    const page = parseInt(options.page, 10);
+    const limit = parseInt(options.limit, 10);
+    const skip = (page - 1) * limit;
+    query = query.skip(skip).limit(limit);
+  }
+
+  let bookings = await query;
+  bookings = await populateMissingAddresses(bookings);
+  return bookings.map((b) => enrichBookingWithDetails(b));
+}
+
+export async function getBookingsListWithPagination(filter, options = {}) {
+  const page = options.page ? parseInt(options.page, 10) : 1;
+  const limit = options.limit ? parseInt(options.limit, 10) : 10;
+  const skip = (page - 1) * limit;
+
+  let sort = { createdAt: -1 };
+  if (options.sortBy) {
+    const sortOrder = options.sortOrder === 'asc' || options.sortOrder === 1 ? 1 : -1;
+    sort = { [options.sortBy]: sortOrder };
+  } else if (options.sort) {
+    sort = options.sort;
+  }
+
+  const [totalResults, rawDocs] = await Promise.all([
+    Bookings.countDocuments(filter),
+    Bookings.find(filter).populate(defaultBookingPopulate).sort(sort).skip(skip).limit(limit),
+  ]);
+
+  const totalPages = Math.ceil(totalResults / limit) || 1;
+  const populatedDocs = await populateMissingAddresses(rawDocs);
+  const enrichedResults = populatedDocs.map((b) => enrichBookingWithDetails(b));
+
+  return {
+    results: enrichedResults,
+    page,
+    limit,
+    totalPages,
+    totalResults,
+  };
 }
 
 async function generateUniqueBookingId() {

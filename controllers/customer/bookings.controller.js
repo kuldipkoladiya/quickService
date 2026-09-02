@@ -56,7 +56,15 @@ const buildCustomerBookingFilter = (req, customerIdOverride = null) => {
 
 export const listBookings = catchAsync(async (req, res) => {
   const filter = buildCustomerBookingFilter(req);
-  const options = pick(req.query, ['sortBy', 'sortOrder']);
+  const options = pick(req.query, ['page', 'limit', 'sortBy', 'sortOrder']);
+  if (options.page) options.page = parseInt(options.page, 10);
+  if (options.limit) options.limit = parseInt(options.limit, 10);
+
+  if (req.query.page || req.query.limit) {
+    const bookings = await bookingsService.getBookingsListWithPagination(filter, options);
+    return res.status(httpStatus.OK).send({ results: bookings });
+  }
+
   const bookings = await bookingsService.getBookingsList(filter, options);
   return res.status(httpStatus.OK).send({ results: bookings });
 });
