@@ -63,11 +63,6 @@ try {
   console.error('[Firebase] Failed to initialize Firebase Admin SDK:', error.message);
 }
 
-const defaultNotificationOptions = {
-  priority: 'high',
-  timeToLive: 60 * 60 * 24, // 24 hours
-};
-
 /**
  * Resolve User ID (if a VendorUser ID was passed, find its underlying User ID)
  * @param {string|ObjectId|Object} idOrUser
@@ -150,7 +145,6 @@ export const sendPushNotification = async ({
   imageUrl = null,
   sound = 'default',
   badge = 1,
-  options = {},
 }) => {
   const tokenList = Array.isArray(tokens) ? tokens.filter(Boolean) : [tokens].filter(Boolean);
 
@@ -175,71 +169,64 @@ export const sendPushNotification = async ({
     ...(imageUrl && { imageUrl }),
   };
 
-  const multicastMessage = {
-    tokens: tokenList,
-    notification: notificationPayload,
-    data: stringifiedData,
-    android: {
-      priority: 'high',
-      notification: {
-        sound: sound || 'default',
-        clickAction: 'FLUTTER_NOTIFICATION_CLICK',
-        channelId: 'karyaah_channel',
-        ...(imageUrl && { imageUrl }),
-      },
-    },
-    apns: {
-      payload: {
-        aps: {
+  const sendPromises = tokenList.map(async (token) => {
+    const message = {
+      token,
+      notification: notificationPayload,
+      data: stringifiedData,
+      android: {
+        priority: 'high',
+        notification: {
           sound: sound || 'default',
-          badge: Number(badge) || 1,
-          contentAvailable: true,
+          clickAction: 'FLUTTER_NOTIFICATION_CLICK',
+          channelId: 'karyaah_channel',
+          ...(imageUrl && { imageUrl }),
         },
       },
-    },
-  };
+      apns: {
+        payload: {
+          aps: {
+            sound: sound || 'default',
+            badge: Number(badge) || 1,
+            contentAvailable: true,
+          },
+        },
+      },
+    };
+    return messaging.send(message);
+  });
 
   try {
-    let response;
-    if (typeof messaging.sendEachForMulticast === 'function') {
-      response = await messaging.sendEachForMulticast(multicastMessage);
-    } else if (typeof messaging.sendMulticast === 'function') {
-      response = await messaging.sendMulticast(multicastMessage);
-    } else {
-      response = await messaging.sendToDevice(
-        tokenList,
-        {
-          notification: notificationPayload,
-          data: stringifiedData,
-        },
-        { ...defaultNotificationOptions, ...options }
-      );
-    }
-
+    const results = await Promise.allSettled(sendPromises);
     const badTokens = [];
-    if (response && response.responses) {
-      response.responses.forEach((resp, idx) => {
-        if (!resp.success && resp.error) {
-          const errorCode = resp.error.code;
-          if (
-            errorCode === 'messaging/invalid-registration-token' ||
-            errorCode === 'messaging/registration-token-not-registered'
-          ) {
-            badTokens.push(tokenList[idx]);
-          }
+    let successCount = 0;
+    let failureCount = 0;
+
+    results.forEach((res, idx) => {
+      if (res.status === 'fulfilled') {
+        successCount += 1;
+      } else {
+        failureCount += 1;
+        const err = res.reason;
+        const errorCode = err && err.code;
+        if (
+          errorCode === 'messaging/invalid-registration-token' ||
+          errorCode === 'messaging/registration-token-not-registered'
+        ) {
+          badTokens.push(tokenList[idx]);
         }
-      });
-    }
+      }
+    });
 
     if (badTokens.length) {
       await cleanInvalidDeviceTokens(badTokens);
     }
 
     return {
-      success: true,
-      successCount: response.successCount || (response.results ? response.successCount : tokenList.length),
-      failureCount: response.failureCount || 0,
-      response,
+      success: successCount > 0,
+      successCount,
+      failureCount,
+      results,
     };
   } catch (error) {
     console.error('[Firebase] Send push notification error:', error.message);
@@ -708,7 +695,7 @@ export const notifyLoginSuccess = async (user) => {
 /**
  * Backward compatibility alias
  */
-export const sendNotification = async (deviceToken, message, options = {}) => {
+export const sendNotification = async (deviceToken, message) => {
   const title = message.title || (message.notification && message.notification.title) || 'Notification';
   const body = message.body || (message.notification && message.notification.body) || '';
   const data = message.data || {};
@@ -717,6 +704,5 @@ export const sendNotification = async (deviceToken, message, options = {}) => {
     title,
     body,
     data,
-    options,
   });
 };
