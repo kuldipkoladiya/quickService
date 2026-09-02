@@ -763,6 +763,11 @@ export async function createBookings(body = {}) {
     body.status = EnumStatusOfBookings.PANDING;
   }
 
+  if (!body.customerId && body.createdBy) {
+    // eslint-disable-next-line no-param-reassign
+    body.customerId = body.createdBy;
+  }
+
   if (body.customerId) {
     const customerId = await User.findOne({ _id: body.customerId });
     if (!customerId) {

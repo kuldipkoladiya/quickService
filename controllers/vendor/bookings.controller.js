@@ -169,7 +169,12 @@ export const acceptBooking = catchAsync(async (req, res) => {
   }
 
   // Notify customer of acceptance
-  const vendorName = req.user ? req.user.fullName || req.user.name || 'Vendor' : 'Vendor';
+  let vendorName = 'Vendor';
+  if (req.user) {
+    const vendorUser = await VendorUser.findOne({ userId: req.user._id, isDeleted: { $ne: true } });
+    vendorName =
+      (vendorUser && (vendorUser.businessName || vendorUser.name)) || req.user.fullName || req.user.name || 'Vendor';
+  }
   notificationService.notifyBookingAccepted(booking, vendorName).catch(() => {});
 
   const data = await bookingsService.getBookingSummaryDetails(booking._id);
@@ -211,7 +216,12 @@ export const onTheWayBooking = catchAsync(async (req, res) => {
   }
 
   // Notify customer that vendor is on the way
-  const vendorNameOnTheWay = req.user ? req.user.fullName || req.user.name || 'Vendor' : 'Vendor';
+  let vendorNameOnTheWay = 'Vendor';
+  if (req.user) {
+    const vendorUser = await VendorUser.findOne({ userId: req.user._id, isDeleted: { $ne: true } });
+    vendorNameOnTheWay =
+      (vendorUser && (vendorUser.businessName || vendorUser.name)) || req.user.fullName || req.user.name || 'Vendor';
+  }
   notificationService.notifyVendorOnTheWay(booking, vendorNameOnTheWay).catch(() => {});
 
   const data = await bookingsService.getBookingSummaryDetails(booking._id);

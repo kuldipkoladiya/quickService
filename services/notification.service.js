@@ -1,7 +1,7 @@
 import admin from 'firebase-admin';
 import path from 'path';
 import fs from 'fs';
-import { User, VendorUser, Notifications } from 'models';
+import { User, VendorUser, Notifications, Bookings } from 'models';
 import { EnumNotificationType } from 'models/enum.model';
 
 let isFirebaseInitialized = false;
@@ -70,19 +70,30 @@ try {
  */
 export const resolveUserId = async (idOrUser) => {
   if (!idOrUser) return null;
+
+  let rawId = idOrUser;
   if (typeof idOrUser === 'object') {
-    if (idOrUser.userId) return idOrUser.userId;
-    if (idOrUser._id) return idOrUser._id;
+    if (idOrUser.userId) {
+      return typeof idOrUser.userId === 'object' && idOrUser.userId._id ? idOrUser.userId._id : idOrUser.userId;
+    }
+    if (idOrUser._id) {
+      rawId = idOrUser._id;
+    }
   }
+
+  const rawIdStr = String(rawId);
+
+  // Check if rawId belongs to a VendorUser
   try {
-    const vendorUser = await VendorUser.findById(idOrUser).select('userId');
+    const vendorUser = await VendorUser.findById(rawIdStr).select('userId');
     if (vendorUser && vendorUser.userId) {
       return vendorUser.userId;
     }
   } catch (e) {
     // Not an ObjectId or not found
   }
-  return idOrUser;
+
+  return rawId;
 };
 
 /**
@@ -357,11 +368,17 @@ export const sendNotificationAndSave = async ({
  * 1. Customer: Booking Placed
  */
 export const notifyBookingPlaced = async (booking) => {
-  if (!booking || !booking.customerId) return;
+  if (!booking) return;
+  let { customerId } = booking;
+  if (!customerId && booking._id) {
+    const fresh = await Bookings.findById(booking._id).select('customerId');
+    if (fresh && fresh.customerId) customerId = fresh.customerId;
+  }
+  if (!customerId) return;
   const bookingDisplayId = booking.bookingId || String(booking._id).slice(-6).toUpperCase();
   return sendNotificationAndSave({
-    receiverId: booking.customerId,
-    senderId: booking.customerId,
+    receiverId: customerId,
+    senderId: customerId,
     title: 'Booking Confirmed 🎉',
     message: `Your booking #${bookingDisplayId} has been successfully placed.`,
     notificationType: EnumNotificationType.BOOKING_PLACED,
@@ -379,8 +396,15 @@ export const notifyBookingPlaced = async (booking) => {
  */
 export const notifyNewBookingRequest = async (booking, targetVendorId = null) => {
   if (!booking) return;
-  const vendorId = targetVendorId || booking.vendorId;
-  if (!vendorId) return;
+  let vendorId = targetVendorId || booking.vendorId;
+  if (!vendorId && booking._id) {
+    const fresh = await Bookings.findById(booking._id).select('vendorId customerId');
+    if (fresh && fresh.vendorId) vendorId = fresh.vendorId;
+  }
+  if (!vendorId) {
+    console.warn('[Notification:NEW_BOOKING_REQUEST] ⚠️ Skipped: No vendorId found for booking:', booking._id);
+    return;
+  }
   const bookingDisplayId = booking.bookingId || String(booking._id).slice(-6).toUpperCase();
   return sendNotificationAndSave({
     receiverId: vendorId,
@@ -401,11 +425,20 @@ export const notifyNewBookingRequest = async (booking, targetVendorId = null) =>
  * 3. Customer: Vendor Accepted Booking
  */
 export const notifyBookingAccepted = async (booking, vendorName = 'Vendor') => {
-  if (!booking || !booking.customerId) return;
+  if (!booking) return;
+  let { customerId } = booking;
+  if (!customerId && booking._id) {
+    const fresh = await Bookings.findById(booking._id).select('customerId vendorId');
+    if (fresh && fresh.customerId) customerId = fresh.customerId;
+  }
+  if (!customerId) {
+    console.warn('[Notification:BOOKING_ACCEPTED] ⚠️ Skipped: No customerId found for booking:', booking._id);
+    return;
+  }
   const bookingDisplayId = booking.bookingId || String(booking._id).slice(-6).toUpperCase();
   return sendNotificationAndSave({
-    receiverId: booking.customerId,
-    senderId: booking.vendorId || booking.customerId,
+    receiverId: customerId,
+    senderId: booking.vendorId || customerId,
     title: 'Vendor Assigned 👨‍🔧',
     message: `${vendorName} has accepted your booking #${bookingDisplayId}.`,
     notificationType: EnumNotificationType.BOOKING_ACCEPTED,

@@ -99,13 +99,17 @@ export const createBookings = catchAsync(async (req, res) => {
   const { body } = req;
   body.createdBy = req.user._id;
   body.updatedBy = req.user._id;
+  if (!body.customerId && req.user) {
+    body.customerId = req.user._id;
+  }
   const options = {};
   const bookings = await bookingsService.createBookings(body, options);
 
   // Dispatch push notifications asynchronously
   notificationService.notifyBookingPlaced(bookings).catch(() => {});
-  if (bookings.vendorId) {
-    notificationService.notifyNewBookingRequest(bookings).catch(() => {});
+  const targetVendor = bookings.vendorId || body.vendorId;
+  if (targetVendor) {
+    notificationService.notifyNewBookingRequest(bookings, targetVendor).catch(() => {});
   }
 
   return res.status(httpStatus.CREATED).send({ results: bookings });
