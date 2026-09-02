@@ -79,7 +79,8 @@ export const defaultBookingPopulate = [
     populate: [
       {
         path: 'userId',
-        select: 'name fullName email mobileNumber profileImage profilePic userProfilePic location images',
+        select:
+          'name fullName email mobileNumber profileImage profilePic userProfilePic location images countryCode businessName',
       },
       { path: 'categoryId', select: 'name title image' },
     ],
@@ -119,7 +120,50 @@ export function enrichBookingWithDetails(booking) {
     (typeof address === 'object' && address !== null && address.receiverName) ||
     '';
 
-  // 2. Service Name
+  // 2. Vendor Name, Business Name, Profile Pic, Mobile Number
+  let vendorName = '';
+  let businessName = '';
+  let profilePic = '';
+  let profileImage = '';
+  let mobileNumber = null;
+  let countryCode = '+91';
+
+  if (vendorObj && typeof vendorObj === 'object') {
+    businessName = vendorObj.businessName || '';
+    if (vendorUserAccount && typeof vendorUserAccount === 'object') {
+      vendorName = vendorUserAccount.fullName || vendorUserAccount.name || vendorObj.businessName || '';
+      if (!businessName) businessName = vendorUserAccount.businessName || '';
+      mobileNumber =
+        vendorUserAccount.mobileNumber !== undefined && vendorUserAccount.mobileNumber !== null
+          ? vendorUserAccount.mobileNumber
+          : vendorObj.mobileNumber || null;
+      countryCode = vendorUserAccount.countryCode || vendorObj.countryCode || '+91';
+      profileImage =
+        vendorUserAccount.profileImage ||
+        vendorUserAccount.profilePic ||
+        (Array.isArray(vendorUserAccount.userProfilePic) &&
+          vendorUserAccount.userProfilePic.length > 0 &&
+          vendorUserAccount.userProfilePic[0].url) ||
+        vendorObj.profileImage ||
+        vendorObj.profilePic ||
+        '';
+      profilePic = profileImage;
+    } else {
+      vendorName = vendorObj.fullName || vendorObj.name || vendorObj.businessName || '';
+      mobileNumber = vendorObj.mobileNumber || null;
+      countryCode = vendorObj.countryCode || '+91';
+      profileImage =
+        vendorObj.profileImage ||
+        vendorObj.profilePic ||
+        (Array.isArray(vendorObj.userProfilePic) &&
+          vendorObj.userProfilePic.length > 0 &&
+          vendorObj.userProfilePic[0].url) ||
+        '';
+      profilePic = profileImage;
+    }
+  }
+
+  // 3. Service Name
   const serviceNameList = [];
   if (b.serviceIds && Array.isArray(b.serviceIds) && b.serviceIds.length > 0) {
     // eslint-disable-next-line no-restricted-syntax
@@ -150,7 +194,7 @@ export function enrichBookingWithDetails(booking) {
 
   const serviceName = serviceNameList.length > 0 ? serviceNameList.join(', ') : b.serviceName || '';
 
-  // 3. Distance in km
+  // 4. Distance in km
   let lat1 = null;
   let lon1 = null;
   if (
@@ -228,6 +272,22 @@ export function enrichBookingWithDetails(booking) {
     id: mongoId,
     bookingId: b.bookingId,
     customerName,
+    vendorName,
+    businessName,
+    profilePic,
+    profileImage,
+    mobileNumber,
+    vendorMobileNumber: mobileNumber,
+    vendor: {
+      _id: (vendorObj && vendorObj._id) || (vendorUserAccount && vendorUserAccount._id) || null,
+      name: vendorName,
+      businessName,
+      profilePic,
+      profileImage,
+      mobileNumber,
+      countryCode,
+      email: (vendorUserAccount && vendorUserAccount.email) || (vendorObj && vendorObj.email) || null,
+    },
     serviceName,
     totalAmount: b.totalAmount !== undefined && b.totalAmount !== null ? b.totalAmount : b.subtotal || 0,
     distanceInKm,
@@ -297,6 +357,75 @@ export async function populateMissingAddresses(bookings) {
   return bookings;
 }
 
+export async function populateMissingVendors(bookings) {
+  if (!bookings || !Array.isArray(bookings) || bookings.length === 0) return bookings;
+
+  const missingVendorUserIds = [];
+  const missingDirectUserIds = [];
+
+  // eslint-disable-next-line no-restricted-syntax
+  for (const b of bookings) {
+    const v = b.vendorId;
+    if (v && (typeof v === 'string' || mongoose.Types.ObjectId.isValid(v)) && !v.businessName && !v.userId) {
+      missingVendorUserIds.push(v._id || v);
+    } else if (
+      v &&
+      typeof v === 'object' &&
+      v.userId &&
+      (typeof v.userId === 'string' || mongoose.Types.ObjectId.isValid(v.userId)) &&
+      !v.userId.name &&
+      !v.userId.fullName
+    ) {
+      missingDirectUserIds.push(v.userId._id || v.userId);
+    }
+  }
+
+  if (missingVendorUserIds.length > 0) {
+    const foundVendorUsers = await VendorUser.find({ _id: { $in: missingVendorUserIds } })
+      .populate(
+        'userId',
+        'name fullName email mobileNumber profileImage profilePic userProfilePic location images countryCode businessName'
+      )
+      .populate('categoryId', 'name title image');
+    const vendorMap = new Map();
+    // eslint-disable-next-line no-restricted-syntax
+    for (const vu of foundVendorUsers) {
+      vendorMap.set(vu._id.toString(), vu);
+    }
+    // eslint-disable-next-line no-restricted-syntax
+    for (const b of bookings) {
+      const v = b.vendorId;
+      // eslint-disable-next-line no-nested-ternary
+      const vKey = v ? (v._id ? v._id.toString() : v.toString()) : null;
+      if (vKey && vendorMap.has(vKey)) {
+        b.vendorId = vendorMap.get(vKey);
+      }
+    }
+  }
+
+  if (missingDirectUserIds.length > 0) {
+    const foundUsers = await User.find({ _id: { $in: missingDirectUserIds } }).select(
+      'name fullName email mobileNumber profileImage profilePic userProfilePic location images countryCode businessName'
+    );
+    const userMap = new Map();
+    // eslint-disable-next-line no-restricted-syntax
+    for (const u of foundUsers) {
+      userMap.set(u._id.toString(), u);
+    }
+    // eslint-disable-next-line no-restricted-syntax
+    for (const b of bookings) {
+      if (b.vendorId && typeof b.vendorId === 'object' && b.vendorId.userId) {
+        const uKey = (b.vendorId.userId._id || b.vendorId.userId).toString();
+        if (userMap.has(uKey)) {
+          b.vendorId.userId = userMap.get(uKey);
+        }
+      }
+    }
+  }
+
+  return bookings;
+}
+
 export async function getBookingSummaryDetails(identifier) {
   let filter = {};
   if (typeof identifier === 'object' && identifier !== null && !Array.isArray(identifier)) {
@@ -313,7 +442,8 @@ export async function getBookingSummaryDetails(identifier) {
       populate: [
         {
           path: 'userId',
-          select: 'name fullName email mobileNumber profileImage profilePic userProfilePic location images',
+          select:
+            'name fullName email mobileNumber profileImage profilePic userProfilePic location images countryCode businessName',
         },
         { path: 'categoryId', select: 'name title image' },
       ],
@@ -346,6 +476,17 @@ export async function getBookingSummaryDetails(identifier) {
     }
   }
   booking.addressId = resolvedAddress;
+
+  // Ensure vendor is populated if missing
+  if (booking.vendorId && !booking.vendorId.businessName && !booking.vendorId.userId) {
+    const populatedV = await VendorUser.findById(booking.vendorId._id || booking.vendorId)
+      .populate(
+        'userId',
+        'name fullName email mobileNumber profileImage profilePic userProfilePic location images countryCode businessName'
+      )
+      .populate('categoryId', 'name title image');
+    if (populatedV) booking.vendorId = populatedV;
+  }
 
   return enrichBookingWithDetails(booking);
 }
@@ -396,6 +537,7 @@ export async function getBookingsList(filter, options = {}) {
   }
   let bookings = await query;
   bookings = await populateMissingAddresses(bookings);
+  bookings = await populateMissingVendors(bookings);
   return bookings.map((b) => enrichBookingWithDetails(b));
 }
 
@@ -416,6 +558,7 @@ export async function getBookingsListWithPagination(filter, options = {}) {
   const bookings = await Bookings.paginate(filter, paginateOptions);
   if (bookings && Array.isArray(bookings.docs)) {
     bookings.docs = await populateMissingAddresses(bookings.docs);
+    bookings.docs = await populateMissingVendors(bookings.docs);
     bookings.docs = bookings.docs.map((b) => enrichBookingWithDetails(b));
   }
   return bookings;
