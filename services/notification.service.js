@@ -8,21 +8,43 @@ let isFirebaseInitialized = false;
 let messaging = null;
 
 try {
-  const firebaseConfigPath = path.join(__dirname, '../config/firebase.json');
   let serviceAccount = null;
 
+  // 1. Check environment variable FIREBASE_SERVICE_ACCOUNT_JSON
   if (process.env.FIREBASE_SERVICE_ACCOUNT_JSON) {
-    serviceAccount = JSON.parse(process.env.FIREBASE_SERVICE_ACCOUNT_JSON);
-  } else if (fs.existsSync(firebaseConfigPath)) {
-    // eslint-disable-next-line global-require, import/no-dynamic-require
-    serviceAccount = require('../config/firebase.json');
+    try {
+      serviceAccount = JSON.parse(process.env.FIREBASE_SERVICE_ACCOUNT_JSON);
+    } catch (e) {
+      console.error('[Firebase] Failed to parse process.env.FIREBASE_SERVICE_ACCOUNT_JSON:', e.message);
+    }
+  }
+
+  // 2. Check multiple file paths for firebase.json
+  if (!serviceAccount) {
+    const possiblePaths = [
+      path.resolve(process.cwd(), 'config/firebase.json'),
+      path.resolve(process.cwd(), 'build/config/firebase.json'),
+      path.join(__dirname, '../config/firebase.json'),
+      path.join(__dirname, '../../config/firebase.json'),
+    ];
+
+    const foundPath = possiblePaths.find((p) => fs.existsSync(p));
+    if (foundPath) {
+      try {
+        const fileContent = fs.readFileSync(foundPath, 'utf8');
+        serviceAccount = JSON.parse(fileContent);
+      } catch (err) {
+        console.error(`[Firebase] Failed reading ${foundPath}:`, err.message);
+      }
+    }
   }
 
   if (
     serviceAccount &&
     serviceAccount.project_id &&
     serviceAccount.private_key &&
-    !serviceAccount.project_id.includes('sample-project')
+    !serviceAccount.project_id.includes('sample-project') &&
+    !serviceAccount.project_id.includes('your-project-id')
   ) {
     if (!admin.apps.length) {
       admin.initializeApp({
@@ -31,10 +53,10 @@ try {
     }
     messaging = admin.messaging();
     isFirebaseInitialized = true;
-    console.log('[Firebase] Push notification service initialized successfully.');
+    console.log(`[Firebase] Push notification service initialized successfully for project: ${serviceAccount.project_id}`);
   } else {
     console.warn(
-      '[Firebase] Warning: Valid firebase.json service account key not found or using placeholder. Push notifications are in dry/mock mode.'
+      '[Firebase] Warning: Valid firebase.json service account key not found on server or using placeholder. Push notifications are in mock mode.'
     );
   }
 } catch (error) {
