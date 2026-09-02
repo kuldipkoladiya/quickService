@@ -98,6 +98,40 @@ export const defaultBookingPopulate = [
   { path: 'serviceId', select: 'name title image' },
 ];
 
+export function extractProfilePic(userOrVendor) {
+  if (!userOrVendor || typeof userOrVendor !== 'object') return null;
+
+  if (typeof userOrVendor.profileImage === 'string' && userOrVendor.profileImage.trim().length > 0) {
+    return userOrVendor.profileImage.trim();
+  }
+  if (typeof userOrVendor.profilePic === 'string' && userOrVendor.profilePic.trim().length > 0) {
+    return userOrVendor.profilePic.trim();
+  }
+  if (Array.isArray(userOrVendor.userProfilePic) && userOrVendor.userProfilePic.length > 0) {
+    // eslint-disable-next-line no-restricted-syntax
+    for (const p of userOrVendor.userProfilePic) {
+      if (p && typeof p.url === 'string' && p.url.trim().length > 0) {
+        return p.url.trim();
+      }
+      if (typeof p === 'string' && p.trim().length > 0) {
+        return p.trim();
+      }
+    }
+  }
+  if (Array.isArray(userOrVendor.images) && userOrVendor.images.length > 0) {
+    // eslint-disable-next-line no-restricted-syntax
+    for (const img of userOrVendor.images) {
+      if (img && typeof img.url === 'string' && img.url.trim().length > 0) {
+        return img.url.trim();
+      }
+      if (typeof img === 'string' && img.trim().length > 0) {
+        return img.trim();
+      }
+    }
+  }
+  return null;
+}
+
 export function enrichBookingWithDetails(booking) {
   if (!booking) return booking;
   let b = booking;
@@ -124,8 +158,6 @@ export function enrichBookingWithDetails(booking) {
   // 2. Vendor Details (Name, Business Name, Profile Pic, Mobile Number)
   let vendorName = '';
   let businessName = '';
-  let profilePic = '';
-  let profileImage = '';
   let mobileNumber = null;
   let countryCode = '+91';
 
@@ -147,39 +179,15 @@ export function enrichBookingWithDetails(booking) {
         ? vendorUserAccount.mobileNumber
         : vendorObj.mobileNumber || null;
     countryCode = vendorUserAccount.countryCode || vendorObj.countryCode || '+91';
-
-    let picUrl = vendorUserAccount.profileImage || vendorUserAccount.profilePic || '';
-    if (
-      !picUrl &&
-      Array.isArray(vendorUserAccount.userProfilePic) &&
-      vendorUserAccount.userProfilePic.length > 0 &&
-      vendorUserAccount.userProfilePic[0]
-    ) {
-      picUrl = vendorUserAccount.userProfilePic[0].url || '';
-    }
-    if (!picUrl) {
-      picUrl = vendorObj.profileImage || vendorObj.profilePic || '';
-    }
-    profileImage = picUrl;
-    profilePic = picUrl;
   } else if (vendorObj && (vendorObj.businessName || vendorObj.fullName || vendorObj.name || vendorObj.mobileNumber)) {
     businessName = vendorObj.businessName || '';
     vendorName = vendorObj.fullName || vendorObj.name || businessName || '';
     mobileNumber = vendorObj.mobileNumber || null;
     countryCode = vendorObj.countryCode || '+91';
-
-    let picUrl = vendorObj.profileImage || vendorObj.profilePic || '';
-    if (
-      !picUrl &&
-      Array.isArray(vendorObj.userProfilePic) &&
-      vendorObj.userProfilePic.length > 0 &&
-      vendorObj.userProfilePic[0]
-    ) {
-      picUrl = vendorObj.userProfilePic[0].url || '';
-    }
-    profileImage = picUrl;
-    profilePic = picUrl;
   }
+
+  // Extract actual profile pic from user database document or vendor document (null if none exists)
+  const profilePic = extractProfilePic(vendorUserAccount) || extractProfilePic(vendorObj) || null;
 
   const vendorIdVal =
     (vendorObj && (vendorObj._id || vendorObj.id)) ||
@@ -191,7 +199,6 @@ export function enrichBookingWithDetails(booking) {
     name: vendorName,
     businessName,
     profilePic,
-    profileImage,
     mobileNumber,
     countryCode,
     email: vendorUserAccount.email || vendorObj.email || null,
@@ -322,7 +329,6 @@ export function enrichBookingWithDetails(booking) {
     vendorName,
     businessName,
     profilePic,
-    profileImage,
     mobileNumber,
     vendorMobileNumber: mobileNumber,
     vendor: vendorData,
