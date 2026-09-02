@@ -41,4 +41,13 @@ router
    * deleteBookingsById
    * */
   .delete(auth('customer'), validate(bookingsValidation.deleteBookingsById), bookingsController.removeBookings);
+
+router
+  .route('/:bookingsId/cancel')
+  /**
+   * cancelBooking
+   * */
+  .put(auth('customer'), validate(bookingsValidation.cancelBooking), bookingsController.cancelBooking)
+  .post(auth('customer'), validate(bookingsValidation.cancelBooking), bookingsController.cancelBooking);
+
 export default router;

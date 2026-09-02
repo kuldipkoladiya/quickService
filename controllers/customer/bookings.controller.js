@@ -3,8 +3,12 @@
  * Only fields name will be overwritten, if the field name will be changed.
  */
 import httpStatus from 'http-status';
+import mongoose from 'mongoose';
+import { BookingTracking, Bookings } from 'models';
+import { EnumStatusOfBookings } from 'models/enum.model';
 import { bookingsService } from 'services';
 import { buildBookingStatusFilter } from 'services/bookings.service';
+import ApiError from 'utils/ApiError';
 import { catchAsync } from 'utils/catchAsync';
 import { pick } from 'utils/pick';
 
@@ -111,4 +115,66 @@ export const removeBookings = catchAsync(async (req, res) => {
   };
   const bookings = await bookingsService.removeBookings(filter);
   return res.status(httpStatus.OK).send({ results: bookings });
+});
+
+export const cancelBooking = catchAsync(async (req, res) => {
+  const { bookingsId } = req.params;
+  const { cancelReason, notes } = req.body;
+  if (!cancelReason) {
+    throw new ApiError(httpStatus.BAD_REQUEST, 'cancelReason is required');
+  }
+
+  const bookingQuery = mongoose.Types.ObjectId.isValid(bookingsId)
+    ? { $or: [{ _id: bookingsId }, { bookingId: bookingsId }] }
+    : { bookingId: bookingsId };
+
+  const existingBooking = await Bookings.findOne(bookingQuery);
+  if (!existingBooking) {
+    throw new ApiError(httpStatus.NOT_FOUND, 'Booking not found');
+  }
+
+  if (existingBooking.status === EnumStatusOfBookings.CANCELLED) {
+    throw new ApiError(httpStatus.BAD_REQUEST, 'Booking is already cancelled');
+  }
+
+  if (existingBooking.status === EnumStatusOfBookings.COMPLETED) {
+    throw new ApiError(httpStatus.BAD_REQUEST, 'Cannot cancel a completed booking');
+  }
+
+  // Check customer ownership if logged-in user is a customer
+  if (
+    req.user &&
+    req.user.role === 'customer' &&
+    existingBooking.customerId &&
+    existingBooking.customerId.toString() !== req.user._id.toString()
+  ) {
+    throw new ApiError(httpStatus.FORBIDDEN, 'You do not have permission to cancel this booking');
+  }
+
+  const updateData = {
+    status: EnumStatusOfBookings.CANCELLED,
+    cancelReason,
+    updatedBy: req.user._id,
+  };
+  if (notes) updateData.notes = notes;
+
+  const booking = await bookingsService.updateBookings({ _id: existingBooking._id }, updateData, { new: true });
+
+  try {
+    await BookingTracking.create({
+      bookingId: booking._id,
+      status: 'cancelled',
+      note: cancelReason || notes || 'Booking cancelled by customer',
+      createdBy: req.user._id,
+      updatedBy: req.user._id,
+    });
+  } catch (err) {
+    // ignore tracking creation error
+  }
+
+  const data = await bookingsService.getBookingSummaryDetails(booking._id);
+  return res.status(httpStatus.OK).send({
+    message: 'Booking cancelled successfully',
+    results: data,
+  });
 });

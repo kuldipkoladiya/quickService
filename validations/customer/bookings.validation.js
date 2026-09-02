@@ -139,3 +139,17 @@ export const getBookingsByCustomerId = {
     })
     .unknown(true),
 };
+
+export const cancelBooking = {
+  params: Joi.object().keys({
+    bookingsId: Joi.string().required(),
+  }),
+  body: Joi.object()
+    .keys({
+      cancelReason: Joi.string().required().messages({
+        'any.required': 'cancelReason is required',
+      }),
+      notes: Joi.string().optional().allow(''),
+    })
+    .unknown(true),
+};
