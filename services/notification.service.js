@@ -300,6 +300,12 @@ export const sendNotificationAndSave = async ({
   const actualReceiverId = await resolveUserId(receiverId);
   const actualSenderId = senderId ? await resolveUserId(senderId) : actualReceiverId;
 
+  console.log(
+    `[Notification:${notificationType}] 🔔 Dispatching "${title}" to User ID: ${actualReceiverId} | Related: ${
+      related || 'None'
+    }`
+  );
+
   const dbNotification = await Notifications.create({
     receiverId: actualReceiverId,
     senderId: actualSenderId,
@@ -322,6 +328,20 @@ export const sendNotificationAndSave = async ({
       ...data,
     },
   });
+
+  if (pushResult && pushResult.success) {
+    console.log(
+      `[Notification:${notificationType}] ✅ Push delivered to User: ${actualReceiverId} | Sent count: ${
+        pushResult.successCount || 0
+      }`
+    );
+  } else {
+    console.log(
+      `[Notification:${notificationType}] ℹ️ DB record created (ID: ${dbNotification._id}). Push status: ${
+        pushResult ? pushResult.message || pushResult.error || 'No active device tokens' : 'No push sent'
+      }`
+    );
+  }
 
   return {
     dbNotification,
