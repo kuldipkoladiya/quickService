@@ -746,9 +746,11 @@ export async function createBookings(body = {}) {
   // eslint-disable-next-line no-param-reassign
   body.bookingTime = resolvedTime;
 
-  if (body.bookingType === 'schedule' || (body.timeSlot && body.timeSlot !== realTime)) {
-    // eslint-disable-next-line no-param-reassign
-    body.bookingType = 'schedule';
+  if (body.bookingType) {
+    if (body.bookingType === 'instant' && !body.estimatedArrival) {
+      // eslint-disable-next-line no-param-reassign
+      body.estimatedArrival = (vendorAvailability && vendorAvailability.instantArrivalEstimate) || '30-40 mins';
+    }
   } else {
     // eslint-disable-next-line no-param-reassign
     body.bookingType = (vendorAvailability && vendorAvailability.bookingOption) || 'instant';

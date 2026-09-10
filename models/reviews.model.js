@@ -42,6 +42,12 @@ const ReviewsSchema = new mongoose.Schema(
     review: {
       type: String,
     },
+    vendorReply: {
+      type: String,
+    },
+    vendorRepliedAt: {
+      type: Date,
+    },
   },
   { timestamps: { createdAt: true, updatedAt: true } }
 );

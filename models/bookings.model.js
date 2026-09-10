@@ -119,6 +119,14 @@ const BookingsSchema = new mongoose.Schema(
     notes: {
       type: String,
     },
+    isReviewed: {
+      type: Boolean,
+      default: false,
+    },
+    reviewId: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: 'Reviews',
+    },
   },
   { timestamps: { createdAt: true, updatedAt: true } }
 );

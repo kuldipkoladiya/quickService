@@ -597,18 +597,58 @@ export const notifyBookingCancelled = async (booking, cancelledByRole, cancelRea
 /**
  * 9. Vendor: New Review Received
  */
-export const notifyNewReview = async (review, vendorUserId, rating, comment = '') => {
+export const notifyNewReview = async (review, vendorUserId, rating, comment = '', customerName = '') => {
   if (!vendorUserId) return;
+  const author = customerName ? `${customerName}` : 'A customer';
+  const snippet = comment ? `"${comment.slice(0, 70)}..."` : 'left a review';
   return sendNotificationAndSave({
     receiverId: vendorUserId,
     senderId: review.createdBy || vendorUserId,
     title: `New Review Received! ⭐ ${rating}/5`,
-    message: comment ? `"${comment.slice(0, 80)}..."` : 'A customer has rated your service.',
+    message: `${author} rated your service: ${snippet}`,
     notificationType: EnumNotificationType.NEW_REVIEW,
     related: review._id ? String(review._id) : '',
     data: {
       reviewId: review._id ? String(review._id) : '',
       rating: String(rating),
+      type: 'REVIEWS',
+    },
+  }).catch(() => {});
+};
+
+/**
+ * 9b. Customer: Review Submitted Confirmation
+ */
+export const notifyReviewSubmittedToCustomer = async (review, customerId, vendorName = 'the vendor') => {
+  if (!customerId) return;
+  return sendNotificationAndSave({
+    receiverId: customerId,
+    senderId: review.vendorId || customerId,
+    title: 'Review Submitted! ⭐',
+    message: `Thank you for sharing your feedback for ${vendorName || 'your service'}!`,
+    notificationType: EnumNotificationType.NEW_REVIEW,
+    related: review._id ? String(review._id) : '',
+    data: {
+      reviewId: review._id ? String(review._id) : '',
+      type: 'REVIEWS',
+    },
+  }).catch(() => {});
+};
+
+/**
+ * 9c. Customer: Vendor Replied to Review
+ */
+export const notifyVendorReviewReply = async (review, customerId, vendorName = 'Vendor', replyText = '') => {
+  if (!customerId) return;
+  return sendNotificationAndSave({
+    receiverId: customerId,
+    senderId: review.vendorId || customerId,
+    title: `${vendorName} replied to your review 💬`,
+    message: replyText ? `"${replyText.slice(0, 80)}..."` : 'Vendor has responded to your review.',
+    notificationType: EnumNotificationType.NEW_REVIEW,
+    related: review._id ? String(review._id) : '',
+    data: {
+      reviewId: review._id ? String(review._id) : '',
       type: 'REVIEWS',
     },
   }).catch(() => {});
