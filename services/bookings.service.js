@@ -352,6 +352,20 @@ export function enrichBookingWithDetails(booking) {
     (booking && booking.id && booking.id.toString()) ||
     null;
 
+  let subtotal = 0;
+  if (b.subtotal !== undefined && b.subtotal !== null) {
+    subtotal = Number(b.subtotal);
+  } else if (b.totalAmount !== undefined && b.totalAmount !== null) {
+    subtotal = Number(b.totalAmount);
+  }
+
+  const serviceFee = b.serviceFee !== undefined && b.serviceFee !== null ? Number(b.serviceFee) : 0;
+  const tax = b.tax !== undefined && b.tax !== null ? Number(b.tax) : 0;
+  const totalAmount =
+    b.totalAmount !== undefined && b.totalAmount !== null
+      ? Number(b.totalAmount)
+      : Math.round((subtotal + serviceFee + tax) * 100) / 100;
+
   return {
     _id: mongoId,
     id: mongoId,
@@ -364,7 +378,10 @@ export function enrichBookingWithDetails(booking) {
     vendorMobileNumber: mobileNumber,
     vendor: vendorData,
     serviceName,
-    totalAmount: b.totalAmount !== undefined && b.totalAmount !== null ? b.totalAmount : b.subtotal || 0,
+    subtotal,
+    serviceFee,
+    tax,
+    totalAmount,
     distanceInKm,
     addressId: populatedAddress,
     bookingDate,
