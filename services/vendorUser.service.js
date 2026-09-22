@@ -339,8 +339,8 @@ export async function getNearVendorUsersByCategory(longitude, latitude, category
         gstNumber: '$vendorUser.gstNumber',
         description: '$vendorUser.description',
         experience: '$vendorUser.experience',
-        rating: '$vendorUser.rating',
-        totalReviews: '$vendorUser.totalReviews',
+        rating: { $ifNull: ['$vendorUser.rating', 0] },
+        totalReviews: { $ifNull: ['$vendorUser.totalReviews', 0] },
         serviceRadius: '$vendorUser.serviceRadius',
         visitCharges: '$vendorUser.visitCharges',
         isKycVerified: '$vendorUser.isKycVerified',
@@ -426,6 +426,8 @@ export async function getNearVendorUsersByCategory(longitude, latitude, category
     const userIdVal = (doc.userId && doc.userId._id) || doc.userId;
     const profilePicVal = (doc.userId && (doc.userId.profilePic || doc.userId.profileImage)) || null;
     const categoryTitleVal = (doc.categoryDetails && doc.categoryDetails.title) || null;
+    const rating = doc.rating !== undefined && doc.rating !== null ? Number(doc.rating) : 0;
+    const totalReviews = doc.totalReviews !== undefined && doc.totalReviews !== null ? Number(doc.totalReviews) : 0;
 
     return {
       _id: doc._id,
@@ -436,6 +438,9 @@ export async function getNearVendorUsersByCategory(longitude, latitude, category
       profilePic: profilePicVal,
       charge,
       distance: doc.distance !== undefined && doc.distance !== null ? Math.round((doc.distance / 1000) * 100) / 100 : null,
+      rating,
+      averageRating: rating,
+      totalReviews,
       vendorAvailability: {
         isOnline,
         storeStatus,

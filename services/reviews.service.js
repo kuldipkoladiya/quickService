@@ -186,7 +186,7 @@ export async function getReviewsListWithPagination(filter, options = {}) {
 /**
  * Customer creates a review for a booking
  */
-export async function createCustomerReview(customerId, body, user = null) {
+export async function createCustomerReview(customerId, body = null) {
   const { bookingId, rating, review: reviewText } = body;
 
   if (!bookingId) {
@@ -337,7 +337,7 @@ export async function vendorReplyToReview(vendorId, reviewsId, vendorReply, vend
   return Reviews.findById(review._id).populate(defaultReviewPopulate);
 }
 
-export async function createReviews(body, options = {}) {
+export async function createReviews(body = {}) {
   if (body.bookingId) {
     const booking = await Bookings.findOne({ _id: body.bookingId });
     if (!booking) {
