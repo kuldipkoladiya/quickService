@@ -60,5 +60,9 @@ ReviewsSchema.plugin(softDelete, {
   deletedBy: 'deletedBy',
   deletedAt: 'deletedAt',
 });
+ReviewsSchema.index({ vendorId: 1, isDeleted: 1, createdAt: -1 });
+ReviewsSchema.index({ customerId: 1, isDeleted: 1, createdAt: -1 });
+ReviewsSchema.index({ bookingId: 1, isDeleted: 1 });
+
 const ReviewsModel = mongoose.models.Reviews || mongoose.model('Reviews', ReviewsSchema, 'Reviews');
 module.exports = ReviewsModel;
