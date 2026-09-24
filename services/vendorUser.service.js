@@ -589,35 +589,22 @@ export async function getVendorUserDetailsWithServices(vendorUserId) {
     return '';
   }
 
-  // Format only the latest 5 reviews
+  // Format only the latest 5 reviews with only the requested fields
   const formattedReviews = reviewsList.map((rev) => {
     const cust = rev.customerId && typeof rev.customerId === 'object' ? rev.customerId : {};
     const customerName = cust.fullName || cust.name || 'Customer';
-    const customerImage = extractCustomerProfilePic(cust);
+    const profilePic = extractCustomerProfilePic(cust);
     const ratingValue = rev.rating !== undefined && rev.rating !== null ? Number(rev.rating) : 0;
+    const reviewId = rev._id ? rev._id.toString() : rev.id;
 
     return {
-      ...rev,
-      _id: rev._id,
-      id: rev._id ? rev._id.toString() : rev.id,
-      rating: ratingValue,
+      id: reviewId,
+      _id: rev._id || reviewId,
+      customerName,
+      userProfilePic: profilePic,
       stars: ratingValue,
       review: rev.review || '',
-      reviewMessage: rev.review || '',
-      message: rev.review || '',
-      customerName,
-      customerImage,
-      customer: {
-        id: cust._id ? cust._id.toString() : cust.id,
-        _id: cust._id,
-        name: customerName,
-        fullName: cust.fullName || cust.name || 'Customer',
-        email: cust.email || '',
-        mobileNumber: cust.mobileNumber || null,
-        profileImage: customerImage,
-        profilePic: customerImage,
-        image: customerImage,
-      },
+      reviewTime: rev.createdAt,
     };
   });
 
