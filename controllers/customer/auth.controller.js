@@ -329,18 +329,31 @@ export const verifyOtpCustomer = catchAsync(async (req, res) => {
   // Dispatch welcome login push notification
   notificationService.notifyLoginSuccess(updatedUser).catch(() => {});
 
+  const userJson = updatedUser.toJSON ? updatedUser.toJSON() : updatedUser;
+  if (userJson.profilePic) userJson.profilePic = normalizeS3ProfileUrl(userJson.profilePic);
+  if (userJson.profileImage) userJson.profileImage = normalizeS3ProfileUrl(userJson.profileImage);
+  if (userJson.profilePic && !userJson.profileImage) userJson.profileImage = userJson.profilePic;
+  if (userJson.profileImage && !userJson.profilePic) userJson.profilePic = userJson.profileImage;
+
+  // Fallback to latest entry from userProfilePic if profilePic is still empty
+  if (!userJson.profilePic && Array.isArray(userJson.userProfilePic) && userJson.userProfilePic.length > 0) {
+    for (let i = userJson.userProfilePic.length - 1; i >= 0; i -= 1) {
+      const p = userJson.userProfilePic[i];
+      if (p && p.url) {
+        userJson.profilePic = normalizeS3ProfileUrl(p.url);
+        userJson.profileImage = userJson.profilePic;
+        break;
+      }
+    }
+  }
+
+  userJson.addresses = addresses || [];
+
   return res.status(httpStatus.OK).send({
     results: {
       success: true,
       message: 'Login successful',
-      user: {
-        id: updatedUser._id,
-        email: updatedUser.email,
-        mobileNumber: updatedUser.mobileNumber,
-        fullName: updatedUser.fullName,
-        role: updatedUser.role,
-        addresses: addresses || [],
-      },
+      user: userJson,
       tokens,
     },
   });
