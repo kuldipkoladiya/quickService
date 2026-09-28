@@ -1,7 +1,9 @@
+/* eslint-disable no-param-reassign */
 import ApiError from 'utils/ApiError';
 import httpStatus from 'http-status';
 import { User } from 'models';
 import bcrypt from 'bcryptjs';
+import { normalizeS3ProfileUrl } from 'utils/common';
 import { notificationService } from './index';
 
 export async function getUserById(id, options = {}) {
@@ -25,6 +27,11 @@ export async function updateUserForAuth(filter, body, options = {}, user) {
     body.password = await bcrypt.hash(body.password, 10);
   }
 
+  if (body.profilePic) body.profilePic = normalizeS3ProfileUrl(body.profilePic);
+  if (body.profileImage) body.profileImage = normalizeS3ProfileUrl(body.profileImage);
+  if (body.profilePic && !body.profileImage) body.profileImage = body.profilePic;
+  if (body.profileImage && !body.profilePic) body.profilePic = body.profileImage;
+
   // --- Update user ---
   await User.updateOne(filter, body, options);
   return getOne(filter);
@@ -43,6 +50,11 @@ export async function createUser(body = {}) {
   // if (await User.isEmailTaken(body.email)) {
   //   throw new ApiError(httpStatus.BAD_REQUEST, 'Email already taken');
   // }
+  if (body.profilePic) body.profilePic = normalizeS3ProfileUrl(body.profilePic);
+  if (body.profileImage) body.profileImage = normalizeS3ProfileUrl(body.profileImage);
+  if (body.profilePic && !body.profileImage) body.profileImage = body.profilePic;
+  if (body.profileImage && !body.profilePic) body.profilePic = body.profileImage;
+
   const user = await User.create(body);
   return user;
 }
@@ -55,6 +67,11 @@ export async function updateUser(filter, body, options = {}) {
   if (body.email && (await User.isEmailTaken(body.email, userData.id))) {
     throw new ApiError(httpStatus.BAD_REQUEST, 'Email already taken');
   }
+  if (body.profilePic) body.profilePic = normalizeS3ProfileUrl(body.profilePic);
+  if (body.profileImage) body.profileImage = normalizeS3ProfileUrl(body.profileImage);
+  if (body.profilePic && !body.profileImage) body.profileImage = body.profilePic;
+  if (body.profileImage && !body.profilePic) body.profilePic = body.profileImage;
+
   const user = await User.findOneAndUpdate(filter, body, options);
   return user;
 }

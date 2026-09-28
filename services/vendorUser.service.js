@@ -2,7 +2,7 @@ import ApiError from 'utils/ApiError';
 import httpStatus from 'http-status';
 import mongoose from 'mongoose';
 import { VendorUser, User, Bank, Categories, VendorService, BusinessAddress, VendorAvailability, Reviews } from 'models';
-import { generateOtp } from 'utils/common';
+import { generateOtp, normalizeS3ProfileUrl } from 'utils/common';
 import { countryCodeService, emailService } from 'services';
 import { EnumCodeTypeOfCode } from 'models/enum.model';
 import { sendOtpToMobile } from './mobileotp.service';
@@ -178,7 +178,18 @@ export async function updateVendorProfile(user, body) {
     userUpdate.name = name;
     userUpdate.fullName = name;
   }
-  if (profileImage !== undefined) userUpdate.profileImage = profileImage;
+  if (profileImage !== undefined) {
+    const fixed = normalizeS3ProfileUrl(profileImage);
+    userUpdate.profileImage = fixed;
+    userUpdate.profilePic = fixed;
+  }
+  if (body.profilePic !== undefined) {
+    const fixed = normalizeS3ProfileUrl(body.profilePic);
+    userUpdate.profilePic = fixed;
+    if (userUpdate.profileImage === undefined) {
+      userUpdate.profileImage = fixed;
+    }
+  }
   if (businessName !== undefined) userUpdate.businessName = businessName;
 
   if (Object.keys(userUpdate).length) {
@@ -562,17 +573,18 @@ export async function getVendorUserDetailsWithServices(vendorUserId) {
   function extractCustomerProfilePic(user) {
     if (!user || typeof user !== 'object') return '';
     if (typeof user.profilePic === 'string' && user.profilePic.trim().length > 0) {
-      return user.profilePic.trim();
+      return normalizeS3ProfileUrl(user.profilePic.trim());
     }
     if (typeof user.profileImage === 'string' && user.profileImage.trim().length > 0) {
-      return user.profileImage.trim();
+      return normalizeS3ProfileUrl(user.profileImage.trim());
     }
     if (Array.isArray(user.userProfilePic) && user.userProfilePic.length > 0) {
       for (let i = user.userProfilePic.length - 1; i >= 0; i -= 1) {
         const p = user.userProfilePic[i];
         if (p) {
-          if (typeof p === 'string' && p.trim().length > 0) return p.trim();
-          if (typeof p === 'object' && p.url && typeof p.url === 'string' && p.url.trim().length > 0) return p.url.trim();
+          if (typeof p === 'string' && p.trim().length > 0) return normalizeS3ProfileUrl(p.trim());
+          if (typeof p === 'object' && p.url && typeof p.url === 'string' && p.url.trim().length > 0)
+            return normalizeS3ProfileUrl(p.url.trim());
         }
       }
     }
@@ -580,9 +592,9 @@ export async function getVendorUserDetailsWithServices(vendorUserId) {
       for (let i = user.images.length - 1; i >= 0; i -= 1) {
         const img = user.images[i];
         if (img) {
-          if (typeof img === 'string' && img.trim().length > 0) return img.trim();
+          if (typeof img === 'string' && img.trim().length > 0) return normalizeS3ProfileUrl(img.trim());
           if (typeof img === 'object' && img.url && typeof img.url === 'string' && img.url.trim().length > 0)
-            return img.url.trim();
+            return normalizeS3ProfileUrl(img.url.trim());
         }
       }
     }

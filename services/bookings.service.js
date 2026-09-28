@@ -3,6 +3,7 @@ import ApiError from 'utils/ApiError';
 import httpStatus from 'http-status';
 import { Bookings, User, VendorUser, Services, VendorService, Address, VendorAvailability } from 'models';
 import { EnumStatusOfBookings } from 'models/enum.model';
+import { normalizeS3ProfileUrl } from 'utils/common';
 import { calculateVisitCharges } from './vendorUser.service';
 
 export async function getBookingsById(id, options = {}) {
@@ -103,7 +104,7 @@ export function extractProfilePic(userOrVendor) {
 
   // 1. Current active profilePic field (e.g. hapmeet-user-images)
   if (typeof userOrVendor.profilePic === 'string' && userOrVendor.profilePic.trim().length > 0) {
-    return userOrVendor.profilePic.trim();
+    return normalizeS3ProfileUrl(userOrVendor.profilePic.trim());
   }
 
   // 2. Latest active userProfilePic array entry
@@ -112,14 +113,14 @@ export function extractProfilePic(userOrVendor) {
       const p = userOrVendor.userProfilePic[i];
       if (p) {
         if (typeof p === 'string' && p.trim().length > 0) {
-          return p.trim();
+          return normalizeS3ProfileUrl(p.trim());
         }
         if (typeof p === 'object') {
           if (!p.isDeleted && !p.deleted && typeof p.url === 'string' && p.url.trim().length > 0) {
-            return p.url.trim();
+            return normalizeS3ProfileUrl(p.url.trim());
           }
           if (typeof p.url === 'string' && p.url.trim().length > 0) {
-            return p.url.trim();
+            return normalizeS3ProfileUrl(p.url.trim());
           }
         }
       }
@@ -132,14 +133,14 @@ export function extractProfilePic(userOrVendor) {
       const img = userOrVendor.images[i];
       if (img) {
         if (typeof img === 'string' && img.trim().length > 0) {
-          return img.trim();
+          return normalizeS3ProfileUrl(img.trim());
         }
         if (typeof img === 'object') {
           if (!img.isDeleted && !img.deleted && typeof img.url === 'string' && img.url.trim().length > 0) {
-            return img.url.trim();
+            return normalizeS3ProfileUrl(img.url.trim());
           }
           if (typeof img.url === 'string' && img.url.trim().length > 0) {
-            return img.url.trim();
+            return normalizeS3ProfileUrl(img.url.trim());
           }
         }
       }
@@ -148,7 +149,7 @@ export function extractProfilePic(userOrVendor) {
 
   // 4. Fallback to profileImage field
   if (typeof userOrVendor.profileImage === 'string' && userOrVendor.profileImage.trim().length > 0) {
-    return userOrVendor.profileImage.trim();
+    return normalizeS3ProfileUrl(userOrVendor.profileImage.trim());
   }
 
   return null;

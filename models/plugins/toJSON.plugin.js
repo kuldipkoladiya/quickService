@@ -4,6 +4,8 @@
  *  - removes __v, createdAt, updatedAt, and any path that has private: true
  *  - replaces _id with id
  */
+const { normalizeS3ProfileUrl } = require('../../utils/common');
+
 const toJSON = (schema) => {
   let transform;
   if (schema.options.toJSON && schema.options.toJSON.transform) {
@@ -21,6 +23,27 @@ const toJSON = (schema) => {
       delete ret.__v;
       delete ret.createdAt;
       delete ret.updatedAt;
+
+      if (ret.profilePic) {
+        ret.profilePic = normalizeS3ProfileUrl(ret.profilePic);
+      }
+      if (ret.profileImage) {
+        ret.profileImage = normalizeS3ProfileUrl(ret.profileImage);
+      }
+      if (ret.profilePic && !ret.profileImage) {
+        ret.profileImage = ret.profilePic;
+      }
+      if (ret.profileImage && !ret.profilePic) {
+        ret.profilePic = ret.profileImage;
+      }
+      if (Array.isArray(ret.userProfilePic)) {
+        ret.userProfilePic.forEach((p) => {
+          if (p && p.url) {
+            p.url = normalizeS3ProfileUrl(p.url);
+          }
+        });
+      }
+
       if (transform) {
         return transform(doc, ret, options);
       }

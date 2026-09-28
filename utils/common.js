@@ -1,5 +1,6 @@
 import { Mongoose } from 'mongoose';
 import contentType from './content-type.json';
+import config from '../config/config';
 /* eslint-disable */
 export const asyncForEach = async (array, callback) => {
   for (let index = 0; index < array.length; index += 1) {
@@ -128,4 +129,35 @@ export const getMimeType = (allowedExtension) => {
     const obj = contentType.find((c) => c.key === ext);
     return obj ? obj.mimeType : '';
   });
+};
+
+export const normalizeS3ProfileUrl = (url) => {
+  if (!url || typeof url !== 'string') return url;
+  let trimmed = url.trim();
+  if (!trimmed) return trimmed;
+
+  const bucket =
+    config.aws && config.aws.bucket && config.aws.bucket !== 'aws_bucket_name'
+      ? config.aws.bucket
+      : 'hapmeet-user-images-712789089772-ap-south-1-an';
+  const region = config.aws && config.aws.region && config.aws.region !== 'bucket_region' ? config.aws.region : 'ap-south-1';
+  const correctBase = `https://${bucket}.s3.${region}.amazonaws.com/`;
+
+  // Strip presigned signature query parameters if present on S3 URL
+  if (trimmed.includes('amazonaws.com') && (trimmed.includes('AWSAccessKeyId') || trimmed.includes('X-Amz-'))) {
+    const [baseUrl] = trimmed.split('?');
+    trimmed = baseUrl;
+  }
+
+  // 1. Replace trendigo-s3 domains (e.g. https://trendigo-s3.s3.amazonaws.com/)
+  if (/https?:\/\/trendigo-s3\.s3[^/]*\//i.test(trimmed)) {
+    return trimmed.replace(/https?:\/\/trendigo-s3\.s3[^/]*\//i, correctBase);
+  }
+
+  // 2. If it's a bare S3 key (e.g. users/.../images.jpeg)
+  if (trimmed.startsWith('users/')) {
+    return `${correctBase}${trimmed}`;
+  }
+
+  return trimmed;
 };

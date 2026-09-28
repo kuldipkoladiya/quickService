@@ -6,7 +6,7 @@ import axios from 'axios';
 import jimp from 'jimp';
 // eslint-disable-next-line import/no-extraneous-dependencies
 import AWS from 'aws-sdk';
-import { asyncForEach } from 'utils/common';
+import { asyncForEach, normalizeS3ProfileUrl } from 'utils/common';
 import ApiError from 'utils/ApiError';
 import { TempS3, User } from 'models';
 import config from 'config/config';
@@ -97,30 +97,39 @@ export const validateExtensionForProfilePic = async (preSignedReq, user, isProfi
   }
 
   const url = await getSignedUrlPutObject(preSignedReq.key, preSignedReq.contentType, true);
+  const rawFileUrl = url.split('?')[0];
+  const fileUrl = normalizeS3ProfileUrl(rawFileUrl);
   const tempS3Body = {
     user: user._id,
-    url: url.split('?')[0],
+    url: fileUrl,
     key: preSignedReq.key,
   };
   const tempS3 = new TempS3(tempS3Body);
   let result;
 
   if (preSignedReq.profileType === EnumOfImageTypes.PROFILE_IMAGE) {
-    const userData = await User.findByIdAndUpdate(
-      user._id,
-      {
-        ...(isProfilePic && { profilePic: `${url.split('?')[0]}` }),
-        $addToSet: {
-          userProfilePic: { url: `${url.split('?')[0]}`, name: preSignedReq.key },
-        },
+    const updatePayload = {
+      $addToSet: {
+        userProfilePic: { url: fileUrl, name: preSignedReq.key },
       },
-      { new: true } // To return the updated document
-    );
+    };
+    if (isProfilePic) {
+      updatePayload.profilePic = fileUrl;
+      updatePayload.profileImage = fileUrl;
+    }
+    const userData = await User.findByIdAndUpdate(user._id, updatePayload, { new: true });
     result = { userData };
   }
 
   await tempS3.save();
-  return { url, key: preSignedReq.key, data: result };
+  return {
+    url,
+    fileUrl,
+    profilePic: fileUrl,
+    profileImage: fileUrl,
+    key: preSignedReq.key,
+    data: result,
+  };
 };
 
 export const deleteObjects = async (keys) => {

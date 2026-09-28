@@ -103,6 +103,7 @@ export const updateProfile = {
     mobileNumber: Joi.number().optional(),
     countryCodeId: Joi.string().optional(),
     profileImage: Joi.string().optional(),
+    profilePic: Joi.string().allow('', null).optional(),
     businessName: Joi.string().optional(),
     gstNumber: Joi.string().optional(),
     categoryId: Joi.objectId().optional(),

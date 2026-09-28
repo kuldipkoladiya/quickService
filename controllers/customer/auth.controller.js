@@ -1,5 +1,5 @@
 import httpStatus from 'http-status';
-import { generateOtp } from 'utils/common';
+import { generateOtp, normalizeS3ProfileUrl } from 'utils/common';
 import ApiError from 'utils/ApiError';
 import { catchAsync } from 'utils/catchAsync';
 import {
@@ -427,6 +427,10 @@ export const updateUserInfo = catchAsync(async (req, res) => {
 
   /* ---------------- NORMAL FIELDS ---------------- */
   if (Object.keys(otherFields).length) {
+    if (otherFields.profilePic) otherFields.profilePic = normalizeS3ProfileUrl(otherFields.profilePic);
+    if (otherFields.profileImage) otherFields.profileImage = normalizeS3ProfileUrl(otherFields.profileImage);
+    if (otherFields.profilePic && !otherFields.profileImage) otherFields.profileImage = otherFields.profilePic;
+    if (otherFields.profileImage && !otherFields.profilePic) otherFields.profilePic = otherFields.profileImage;
     await userService.updateUserForAuth({ _id: user._id }, otherFields, { new: true }, user);
   }
 

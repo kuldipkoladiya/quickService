@@ -39,6 +39,7 @@ export const createUser = {
     isDeleted: Joi.bool(),
     fullName: Joi.string(),
     profileImage: Joi.string(),
+    profilePic: Joi.string().allow('', null),
     currentLocation: Joi.string(),
     location: Joi.object()
       .keys({
@@ -63,6 +64,7 @@ export const updateUser = {
     isDeleted: Joi.bool(),
     fullName: Joi.string(),
     profileImage: Joi.string(),
+    profilePic: Joi.string().allow('', null),
     currentLocation: Joi.string(),
     location: Joi.object()
       .keys({
