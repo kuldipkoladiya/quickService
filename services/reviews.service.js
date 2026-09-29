@@ -8,39 +8,25 @@ import { formatNumberK, formatTimeAgo, extractProfilePic } from 'utils/common';
 export const defaultReviewPopulate = [
   {
     path: 'customerId',
-    select: 'name fullName email mobileNumber countryCode profileImage profilePic userProfilePic images',
-  },
-  {
-    path: 'vendorId',
-    select: 'businessName rating totalReviews serviceRadius kycStatus profileCompleted avgResponseTime userId categoryId',
-    populate: [
-      {
-        path: 'userId',
-        select: 'name fullName mobileNumber email profileImage profilePic images',
-      },
-      {
-        path: 'categoryId',
-        select: 'title name icon image',
-      },
-    ],
+    select: 'name fullName profileImage profilePic userProfilePic images',
   },
   {
     path: 'bookingId',
-    select: 'bookingId status bookingType bookingDate bookingTime totalAmount serviceId serviceIds vendorServiceId',
+    select: 'serviceId serviceIds vendorServiceId',
     populate: [
       {
         path: 'serviceId',
-        select: 'name title image',
+        select: 'name title',
       },
       {
         path: 'serviceIds',
-        select: 'name title image price',
+        select: 'name title',
       },
       {
         path: 'vendorServiceId',
         populate: {
           path: 'serviceId',
-          select: 'name title image',
+          select: 'name title',
         },
       },
     ],
@@ -48,77 +34,51 @@ export const defaultReviewPopulate = [
 ];
 
 /**
- * Format review document with all UI required fields
+ * Format review document with only UI required fields
  */
 export function formatReviewForUI(reviewDoc) {
   if (!reviewDoc) return null;
   const r = typeof reviewDoc.toJSON === 'function' ? reviewDoc.toJSON() : { ...reviewDoc };
 
   const customerObj = r.customerId && typeof r.customerId === 'object' ? r.customerId : null;
-  const customerId = customerObj ? customerObj._id || customerObj.id : r.customerId;
-  const customerName = customerObj ? customerObj.fullName || customerObj.name || 'Customer' : 'Customer';
-  const customerProfilePic = customerObj ? extractProfilePic(customerObj) : null;
+  const name = customerObj ? customerObj.fullName || customerObj.name || 'Customer' : 'Customer';
+  const profilePic = customerObj ? extractProfilePic(customerObj) : null;
 
   const bookingObj = r.bookingId && typeof r.bookingId === 'object' ? r.bookingId : null;
   let serviceName = 'Service';
-  let serviceId = null;
-  let serviceImage = null;
 
   if (bookingObj) {
     if (bookingObj.serviceId && typeof bookingObj.serviceId === 'object') {
       serviceName = bookingObj.serviceId.title || bookingObj.serviceId.name || 'Service';
-      serviceId = bookingObj.serviceId._id || bookingObj.serviceId.id;
-      serviceImage = bookingObj.serviceId.image || null;
     } else if (Array.isArray(bookingObj.serviceIds) && bookingObj.serviceIds.length > 0) {
       const s = bookingObj.serviceIds[0];
       if (s && typeof s === 'object') {
         serviceName = s.title || s.name || 'Service';
-        serviceId = s._id || s.id;
-        serviceImage = s.image || null;
       }
     } else if (bookingObj.vendorServiceId && typeof bookingObj.vendorServiceId === 'object') {
       const s = bookingObj.vendorServiceId.serviceId;
       if (s && typeof s === 'object') {
         serviceName = s.title || s.name || 'Service';
-        serviceId = s._id || s.id;
-        serviceImage = s.image || null;
       }
     }
   }
 
-  const timeAgo = formatTimeAgo(r.createdAt);
-  const isReplied = Boolean(r.vendorReply && typeof r.vendorReply === 'string' && r.vendorReply.trim().length > 0);
-  const vendorReply = isReplied ? r.vendorReply.trim() : null;
-  const vendorRepliedAt = isReplied ? r.vendorRepliedAt : null;
-  const vendorReplyTimeAgo = vendorRepliedAt ? formatTimeAgo(vendorRepliedAt) : null;
+  const time = formatTimeAgo(r.createdAt);
+  const reply = r.vendorReply && r.vendorReply.trim().length > 0 ? r.vendorReply.trim() : null;
 
   return {
-    ...r,
-    id: r._id || r.id,
-    customer: {
-      id: customerId,
-      name: customerName,
-      fullName: customerName,
-      profilePic: customerProfilePic,
-      profileImage: customerProfilePic,
-      email: customerObj ? customerObj.email : null,
-      mobileNumber: customerObj ? customerObj.mobileNumber : null,
-      countryCode: customerObj ? customerObj.countryCode : null,
-    },
-    customerName,
-    customerProfilePic,
-    service: {
-      id: serviceId,
-      name: serviceName,
-      title: serviceName,
-      image: serviceImage,
-    },
+    _id: r._id || r.id,
+    name,
+    customerName: name,
+    profilePic,
     serviceName,
-    timeAgo,
-    isReplied,
-    vendorReply,
-    vendorRepliedAt,
-    vendorReplyTimeAgo,
+    rating: r.rating || 0,
+    review: r.review || '',
+    time,
+    timeAgo: time,
+    reply,
+    vendorReply: reply,
+    replyAt: reply ? r.vendorRepliedAt || null : null,
   };
 }
 

@@ -83,20 +83,15 @@ export const listReviews = catchAsync(async (req, res) => {
 
   return res.status(httpStatus.OK).send({
     summary: stats,
-    pagination: {
-      page: reviewsData.page,
-      limit: reviewsData.limit,
-      totalPages: reviewsData.totalPages,
-      totalResults: reviewsData.totalDocs,
-      totalDocs: reviewsData.totalDocs,
-      hasNextPage: reviewsData.hasNextPage,
-      hasPrevPage: reviewsData.hasPrevPage,
-    },
     results: {
-      ...reviewsData,
       docs: formattedDocs,
+      totalDocs: reviewsData.totalDocs,
+      limit: reviewsData.limit,
+      page: reviewsData.page,
+      totalPages: reviewsData.totalPages,
+      hasPrevPage: reviewsData.hasPrevPage,
+      hasNextPage: reviewsData.hasNextPage,
     },
-    data: formattedDocs,
   });
 });
 
