@@ -177,7 +177,14 @@ module.exports = function (schema, options) {
           modelMethodName = 'count';
         }
         schema.statics[method] = function (...args) {
-          const query = Model[modelMethodName].apply(this, args);
+          let callArgs = args;
+          if (method === 'countDocuments' && args.length > 1 && typeof args[1] === 'object') {
+            callArgs = [args[0]];
+            if (typeof args[2] === 'function') {
+              callArgs.push(args[2]);
+            }
+          }
+          const query = Model[modelMethodName].apply(this, callArgs);
           if (!args[2] || args[2].withDeleted !== true) {
             if (use$neOperator) {
               query.where(`${deleted}`).ne(true);
@@ -190,15 +197,29 @@ module.exports = function (schema, options) {
           return query;
         };
         schema.statics[`${method}Deleted`] = function (...args) {
-          if (use$neOperator) {
-            return Model[modelMethodName].apply(this, args).where(`'${deleted}'`).ne(false);
+          let callArgs = args;
+          if (method === 'countDocuments' && args.length > 1 && typeof args[1] === 'object') {
+            callArgs = [args[0]];
+            if (typeof args[2] === 'function') {
+              callArgs.push(args[2]);
+            }
           }
-          return Model[modelMethodName].apply(this, args).where({
+          if (use$neOperator) {
+            return Model[modelMethodName].apply(this, callArgs).where(`'${deleted}'`).ne(false);
+          }
+          return Model[modelMethodName].apply(this, callArgs).where({
             [deleted]: true,
           });
         };
         schema.statics[`${method}WithDeleted`] = function (...args) {
-          return Model[modelMethodName].apply(this, args);
+          let callArgs = args;
+          if (method === 'countDocuments' && args.length > 1 && typeof args[1] === 'object') {
+            callArgs = [args[0]];
+            if (typeof args[2] === 'function') {
+              callArgs.push(args[2]);
+            }
+          }
+          return Model[modelMethodName].apply(this, callArgs);
         };
       } else if (method === 'aggregate') {
         schema.statics[`${method}Deleted`] = function (...arg) {

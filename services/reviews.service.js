@@ -275,6 +275,7 @@ export async function getReviewsListWithPagination(filter, options = {}) {
     ...options,
     populate: options.populate !== false ? options.populate || defaultReviewPopulate : undefined,
     sort: options.sort || { createdAt: -1 },
+    useCustomCountFn: (query) => Reviews.countDocuments(query).exec(),
   };
   return Reviews.paginate(filter, paginateOptions);
 }
