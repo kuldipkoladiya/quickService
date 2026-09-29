@@ -76,6 +76,7 @@ export function formatReviewForUI(reviewDoc) {
     review: r.review || '',
     time,
     timeAgo: time,
+    createdAt: r.createdAt,
     reply,
     vendorReply: reply,
     replyAt: reply ? r.vendorRepliedAt || null : null,
