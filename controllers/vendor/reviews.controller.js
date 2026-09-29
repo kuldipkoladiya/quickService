@@ -1,8 +1,8 @@
 import httpStatus from 'http-status';
 import { VendorUser } from 'models';
 import { reviewsService, notificationService } from 'services';
+import ApiError from 'utils/ApiError';
 import { catchAsync } from 'utils/catchAsync';
-import { pick } from 'utils/pick';
 
 /**
  * Resolve vendor's VendorUser._id from req.user
@@ -13,59 +13,94 @@ const resolveVendorId = async (user) => {
     userId: user._id,
     isDeleted: { $ne: true },
   });
-  return vendorUser ? vendorUser._id : user._id;
+  if (vendorUser) return vendorUser._id;
+  const directVendor = await VendorUser.findById(user._id);
+  if (directVendor) return directVendor._id;
+  return user._id;
+};
+
+/**
+ * Build Mongoose filter and pagination/sort options for reviews list
+ */
+const buildReviewFilterAndSort = (vendorId, query) => {
+  const filter = {
+    vendorId,
+    isDeleted: { $ne: true },
+  };
+
+  if (query.rating) {
+    filter.rating = Number(query.rating);
+  }
+  if (query.bookingId) {
+    filter.bookingId = query.bookingId;
+  }
+  if (query.isReplied !== undefined) {
+    const isReplied = query.isReplied === 'true' || query.isReplied === true;
+    if (isReplied) {
+      filter.vendorReply = { $exists: true, $nin: [null, ''] };
+    } else {
+      filter.$or = [{ vendorReply: { $exists: false } }, { vendorReply: null }, { vendorReply: '' }];
+    }
+  }
+
+  const sort = {};
+  if (query.sort) {
+    const s = query.sort.toLowerCase();
+    if (s === 'oldest') {
+      sort.createdAt = 1;
+    } else if (s === 'highest') {
+      sort.rating = -1;
+      sort.createdAt = -1;
+    } else if (s === 'lowest') {
+      sort.rating = 1;
+      sort.createdAt = -1;
+    } else {
+      sort.createdAt = -1;
+    }
+  } else if (query.sortBy) {
+    const isAsc = query.sortOrder === 'asc' || query.sortOrder === '1' || query.sortOrder === 1;
+    sort[query.sortBy] = isAsc ? 1 : -1;
+  } else {
+    sort.createdAt = -1;
+  }
+
+  const page = parseInt(query.page, 10) || 1;
+  const limit = parseInt(query.limit, 10) || 10;
+
+  return { filter, options: { page, limit, sort } };
 };
 
 export const listReviews = catchAsync(async (req, res) => {
   const vendorId = await resolveVendorId(req.user);
+  const { filter, options } = buildReviewFilterAndSort(vendorId, req.query);
 
-  const filter = {
-    vendorId,
-    isDeleted: { $ne: true },
-  };
+  const [reviewsData, stats] = await Promise.all([
+    reviewsService.getReviewsListWithPagination(filter, options),
+    reviewsService.getVendorReviewStats(vendorId),
+  ]);
 
-  if (req.query.rating) {
-    filter.rating = Number(req.query.rating);
-  }
-  if (req.query.bookingId) {
-    filter.bookingId = req.query.bookingId;
-  }
+  const formattedDocs = (reviewsData.docs || []).map(reviewsService.formatReviewForUI);
 
-  const options = pick(req.query, ['page', 'limit', 'sortBy', 'sortOrder']);
-  if (options.page) options.page = parseInt(options.page, 10);
-  if (options.limit) options.limit = parseInt(options.limit, 10);
-
-  if (req.query.page || req.query.limit) {
-    const reviews = await reviewsService.getReviewsListWithPagination(filter, options);
-    return res.status(httpStatus.OK).send({ results: reviews });
-  }
-
-  const reviews = await reviewsService.getReviewsList(filter, options);
-  return res.status(httpStatus.OK).send({ results: reviews });
+  return res.status(httpStatus.OK).send({
+    summary: stats,
+    pagination: {
+      page: reviewsData.page,
+      limit: reviewsData.limit,
+      totalPages: reviewsData.totalPages,
+      totalResults: reviewsData.totalDocs,
+      totalDocs: reviewsData.totalDocs,
+      hasNextPage: reviewsData.hasNextPage,
+      hasPrevPage: reviewsData.hasPrevPage,
+    },
+    results: {
+      ...reviewsData,
+      docs: formattedDocs,
+    },
+    data: formattedDocs,
+  });
 });
 
-export const paginateReviews = catchAsync(async (req, res) => {
-  const vendorId = await resolveVendorId(req.user);
-
-  const filter = {
-    vendorId,
-    isDeleted: { $ne: true },
-  };
-
-  if (req.query.rating) {
-    filter.rating = Number(req.query.rating);
-  }
-  if (req.query.bookingId) {
-    filter.bookingId = req.query.bookingId;
-  }
-
-  const options = pick(req.query, ['page', 'limit', 'sortBy', 'sortOrder']);
-  if (options.page) options.page = parseInt(options.page, 10);
-  if (options.limit) options.limit = parseInt(options.limit, 10);
-
-  const reviews = await reviewsService.getReviewsListWithPagination(filter, options);
-  return res.status(httpStatus.OK).send({ results: reviews });
-});
+export const paginateReviews = listReviews;
 
 export const getReviewsSummary = catchAsync(async (req, res) => {
   const vendorId = await resolveVendorId(req.user);
@@ -76,15 +111,23 @@ export const getReviewsSummary = catchAsync(async (req, res) => {
 export const getReviews = catchAsync(async (req, res) => {
   const { reviewsId } = req.params;
   const review = await reviewsService.getReviewsById(reviewsId);
-  return res.status(httpStatus.OK).send({ results: review });
+  if (!review) {
+    throw new ApiError(httpStatus.NOT_FOUND, 'Review not found');
+  }
+  const formattedReview = reviewsService.formatReviewForUI(review);
+  return res.status(httpStatus.OK).send({ results: formattedReview });
 });
 
 export const replyToReview = catchAsync(async (req, res) => {
   const vendorId = await resolveVendorId(req.user);
   const { reviewsId } = req.params;
-  const { vendorReply } = req.body;
+  const replyText = (req.body.vendorReply || req.body.reply || '').trim();
 
-  const updatedReview = await reviewsService.vendorReplyToReview(vendorId, reviewsId, vendorReply, req.user._id);
+  if (!replyText) {
+    throw new ApiError(httpStatus.BAD_REQUEST, 'vendorReply or reply is required');
+  }
+
+  const updatedReview = await reviewsService.vendorReplyToReview(vendorId, reviewsId, replyText, req.user._id);
 
   // Send notification to customer that vendor has replied
   const vendorName =
@@ -95,13 +138,15 @@ export const replyToReview = catchAsync(async (req, res) => {
 
   if (customerId) {
     notificationService
-      .notifyVendorReviewReply(updatedReview, customerId, vendorName, vendorReply)
+      .notifyVendorReviewReply(updatedReview, customerId, vendorName, replyText)
       .catch((err) => console.error('[ReviewNotification] Error notifying customer of reply:', err.message));
   }
 
+  const formattedReview = reviewsService.formatReviewForUI(updatedReview);
+
   return res.status(httpStatus.OK).send({
     message: 'Reply posted successfully',
-    results: updatedReview,
+    results: formattedReview,
   });
 });
 

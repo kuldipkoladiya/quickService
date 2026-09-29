@@ -7,6 +7,8 @@ export const getReviews = {
     .keys({
       rating: Joi.number().min(1).max(5),
       bookingId: Joi.objectId(),
+      isReplied: Joi.boolean(),
+      sort: Joi.string().valid('newest', 'oldest', 'highest', 'lowest', 'NEWEST', 'OLDEST', 'HIGHEST', 'LOWEST'),
       page: Joi.number().integer().min(1),
       limit: Joi.number().integer().min(1).max(100),
       sortBy: Joi.string(),
@@ -20,6 +22,8 @@ export const paginatedReviews = {
     .keys({
       rating: Joi.number().min(1).max(5),
       bookingId: Joi.objectId(),
+      isReplied: Joi.boolean(),
+      sort: Joi.string().valid('newest', 'oldest', 'highest', 'lowest', 'NEWEST', 'OLDEST', 'HIGHEST', 'LOWEST'),
       page: Joi.number().integer().min(1).default(1),
       limit: Joi.number().integer().min(1).max(100).default(10),
       sortBy: Joi.string().default('createdAt'),
@@ -38,9 +42,12 @@ export const replyReview = {
   params: Joi.object().keys({
     reviewsId: Joi.objectId().required(),
   }),
-  body: Joi.object().keys({
-    vendorReply: Joi.string().trim().required(),
-  }),
+  body: Joi.object()
+    .keys({
+      vendorReply: Joi.string().trim(),
+      reply: Joi.string().trim(),
+    })
+    .or('vendorReply', 'reply'),
 };
 
 export const createReviews = {
@@ -61,6 +68,7 @@ export const updateReviews = {
     rating: Joi.number().min(1).max(5),
     review: Joi.string(),
     vendorReply: Joi.string(),
+    reply: Joi.string(),
   }),
 };
 

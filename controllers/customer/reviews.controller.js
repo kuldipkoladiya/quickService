@@ -55,11 +55,13 @@ export const listReviews = catchAsync(async (req, res) => {
 
   if (req.query.page || req.query.limit) {
     const reviews = await reviewsService.getReviewsListWithPagination(filter, options);
+    reviews.docs = (reviews.docs || []).map(reviewsService.formatReviewForUI);
     return res.status(httpStatus.OK).send({ results: reviews });
   }
 
   const reviews = await reviewsService.getReviewsList(filter, options);
-  return res.status(httpStatus.OK).send({ results: reviews });
+  const formattedReviews = (reviews || []).map(reviewsService.formatReviewForUI);
+  return res.status(httpStatus.OK).send({ results: formattedReviews });
 });
 
 export const paginateReviews = catchAsync(async (req, res) => {
@@ -85,13 +87,15 @@ export const paginateReviews = catchAsync(async (req, res) => {
   if (options.limit) options.limit = parseInt(options.limit, 10);
 
   const reviews = await reviewsService.getReviewsListWithPagination(filter, options);
+  reviews.docs = (reviews.docs || []).map(reviewsService.formatReviewForUI);
   return res.status(httpStatus.OK).send({ results: reviews });
 });
 
 export const getReviews = catchAsync(async (req, res) => {
   const { reviewsId } = req.params;
   const review = await reviewsService.getReviewsById(reviewsId);
-  return res.status(httpStatus.OK).send({ results: review });
+  const formatted = review ? reviewsService.formatReviewForUI(review) : null;
+  return res.status(httpStatus.OK).send({ results: formatted });
 });
 
 export const getReviewByBooking = catchAsync(async (req, res) => {

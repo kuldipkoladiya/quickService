@@ -3,11 +3,12 @@ import httpStatus from 'http-status';
 import ApiError from 'utils/ApiError';
 import { Reviews, Bookings, User, VendorUser } from 'models';
 import { EnumStatusOfBookings } from 'models/enum.model';
+import { formatNumberK, formatTimeAgo, extractProfilePic } from 'utils/common';
 
 export const defaultReviewPopulate = [
   {
     path: 'customerId',
-    select: 'name fullName email mobileNumber countryCode profileImage profilePic userProfilePic',
+    select: 'name fullName email mobileNumber countryCode profileImage profilePic userProfilePic images',
   },
   {
     path: 'vendorId',
@@ -15,23 +16,111 @@ export const defaultReviewPopulate = [
     populate: [
       {
         path: 'userId',
-        select: 'name fullName mobileNumber email profileImage profilePic',
+        select: 'name fullName mobileNumber email profileImage profilePic images',
       },
       {
         path: 'categoryId',
-        select: 'title icon image',
+        select: 'title name icon image',
       },
     ],
   },
   {
     path: 'bookingId',
-    select: 'bookingId status bookingType bookingDate bookingTime totalAmount serviceId serviceIds',
-    populate: {
-      path: 'serviceId',
-      select: 'name title image',
-    },
+    select: 'bookingId status bookingType bookingDate bookingTime totalAmount serviceId serviceIds vendorServiceId',
+    populate: [
+      {
+        path: 'serviceId',
+        select: 'name title image',
+      },
+      {
+        path: 'serviceIds',
+        select: 'name title image price',
+      },
+      {
+        path: 'vendorServiceId',
+        populate: {
+          path: 'serviceId',
+          select: 'name title image',
+        },
+      },
+    ],
   },
 ];
+
+/**
+ * Format review document with all UI required fields
+ */
+export function formatReviewForUI(reviewDoc) {
+  if (!reviewDoc) return null;
+  const r = typeof reviewDoc.toJSON === 'function' ? reviewDoc.toJSON() : { ...reviewDoc };
+
+  const customerObj = r.customerId && typeof r.customerId === 'object' ? r.customerId : null;
+  const customerId = customerObj ? customerObj._id || customerObj.id : r.customerId;
+  const customerName = customerObj ? customerObj.fullName || customerObj.name || 'Customer' : 'Customer';
+  const customerProfilePic = customerObj ? extractProfilePic(customerObj) : null;
+
+  const bookingObj = r.bookingId && typeof r.bookingId === 'object' ? r.bookingId : null;
+  let serviceName = 'Service';
+  let serviceId = null;
+  let serviceImage = null;
+
+  if (bookingObj) {
+    if (bookingObj.serviceId && typeof bookingObj.serviceId === 'object') {
+      serviceName = bookingObj.serviceId.title || bookingObj.serviceId.name || 'Service';
+      serviceId = bookingObj.serviceId._id || bookingObj.serviceId.id;
+      serviceImage = bookingObj.serviceId.image || null;
+    } else if (Array.isArray(bookingObj.serviceIds) && bookingObj.serviceIds.length > 0) {
+      const s = bookingObj.serviceIds[0];
+      if (s && typeof s === 'object') {
+        serviceName = s.title || s.name || 'Service';
+        serviceId = s._id || s.id;
+        serviceImage = s.image || null;
+      }
+    } else if (bookingObj.vendorServiceId && typeof bookingObj.vendorServiceId === 'object') {
+      const s = bookingObj.vendorServiceId.serviceId;
+      if (s && typeof s === 'object') {
+        serviceName = s.title || s.name || 'Service';
+        serviceId = s._id || s.id;
+        serviceImage = s.image || null;
+      }
+    }
+  }
+
+  const timeAgo = formatTimeAgo(r.createdAt);
+  const isReplied = Boolean(r.vendorReply && typeof r.vendorReply === 'string' && r.vendorReply.trim().length > 0);
+  const vendorReply = isReplied ? r.vendorReply.trim() : null;
+  const vendorRepliedAt = isReplied ? r.vendorRepliedAt : null;
+  const vendorReplyTimeAgo = vendorRepliedAt ? formatTimeAgo(vendorRepliedAt) : null;
+
+  return {
+    ...r,
+    id: r._id || r.id,
+    customer: {
+      id: customerId,
+      name: customerName,
+      fullName: customerName,
+      profilePic: customerProfilePic,
+      profileImage: customerProfilePic,
+      email: customerObj ? customerObj.email : null,
+      mobileNumber: customerObj ? customerObj.mobileNumber : null,
+      countryCode: customerObj ? customerObj.countryCode : null,
+    },
+    customerName,
+    customerProfilePic,
+    service: {
+      id: serviceId,
+      name: serviceName,
+      title: serviceName,
+      image: serviceImage,
+    },
+    serviceName,
+    timeAgo,
+    isReplied,
+    vendorReply,
+    vendorRepliedAt,
+    vendorReplyTimeAgo,
+  };
+}
 
 /**
  * Recalculate average rating and total reviews for a vendor
@@ -127,11 +216,12 @@ export async function getVendorReviewStats(vendorId) {
   });
 
   const breakdownWithPercentage = {};
-  Object.keys(breakdown).forEach((star) => {
+  ['5', '4', '3', '2', '1'].forEach((star) => {
     const count = breakdown[star];
     const percentage = totalReviews > 0 ? Math.round((count / totalReviews) * 100) : 0;
     breakdownWithPercentage[star] = {
       count,
+      formattedCount: formatNumberK(count),
       percentage,
     };
   });
@@ -139,6 +229,12 @@ export async function getVendorReviewStats(vendorId) {
   return {
     averageRating: avgRating,
     totalReviews,
+    totalReviewsFormatted: formatNumberK(totalReviews),
+    stars: {
+      full: Math.floor(avgRating),
+      half: avgRating % 1 >= 0.5 ? 1 : 0,
+      empty: 5 - Math.floor(avgRating) - (avgRating % 1 >= 0.5 ? 1 : 0),
+    },
     breakdown: breakdownWithPercentage,
   };
 }

@@ -49,8 +49,9 @@ router
 router
   .route('/:reviewsId/reply')
   /**
-   * Vendor Reply to Customer Review
+   * Vendor Reply to Customer Review (Create or Update Reply)
    */
-  .post(auth('vendor'), validate(reviewsValidation.replyReview), reviewsController.replyToReview);
+  .post(auth('vendor'), validate(reviewsValidation.replyReview), reviewsController.replyToReview)
+  .put(auth('vendor'), validate(reviewsValidation.replyReview), reviewsController.replyToReview);
 
 export default router;

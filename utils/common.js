@@ -161,3 +161,107 @@ export const normalizeS3ProfileUrl = (url) => {
 
   return trimmed;
 };
+
+export const formatNumberK = (num) => {
+  if (num === null || num === undefined) return '0';
+  const n = Number(num);
+  if (Number.isNaN(n)) return '0';
+  if (n >= 1000000) {
+    const formatted = (n / 1000000).toFixed(1).replace(/\.0$/, '');
+    return `${formatted}M`;
+  }
+  if (n >= 1000) {
+    const formatted = (n / 1000).toFixed(1).replace(/\.0$/, '');
+    return `${formatted}k`;
+  }
+  return n.toString();
+};
+
+export const formatTimeAgo = (date) => {
+  if (!date) return '';
+  const now = new Date();
+  const past = new Date(date);
+  const diffInSeconds = Math.floor((now.getTime() - past.getTime()) / 1000);
+
+  if (diffInSeconds < 0 || diffInSeconds < 60) {
+    return 'Just now';
+  }
+  const diffInMinutes = Math.floor(diffInSeconds / 60);
+  if (diffInMinutes < 60) {
+    return diffInMinutes === 1 ? '1 min ago' : `${diffInMinutes} mins ago`;
+  }
+  const diffInHours = Math.floor(diffInSeconds / 60);
+  if (diffInHours < 24) {
+    return diffInHours === 1 ? '1 hour ago' : `${diffInHours} hours ago`;
+  }
+  const diffInDays = Math.floor(diffInHours / 24);
+  if (diffInDays < 7) {
+    return diffInDays === 1 ? '1 day ago' : `${diffInDays} days ago`;
+  }
+  const diffInWeeks = Math.floor(diffInDays / 7);
+  if (diffInWeeks < 4) {
+    return diffInWeeks === 1 ? '1 week ago' : `${diffInWeeks} weeks ago`;
+  }
+  const diffInMonths = Math.floor(diffInDays / 30);
+  if (diffInMonths < 12) {
+    return diffInMonths === 1 ? '1 month ago' : `${diffInMonths} months ago`;
+  }
+  const diffInYears = Math.floor(diffInDays / 365);
+  return diffInYears === 1 ? '1 year ago' : `${diffInYears} years ago`;
+};
+
+export const extractProfilePic = (userOrVendor) => {
+  if (!userOrVendor || typeof userOrVendor !== 'object') return null;
+
+  // 1. Current active profilePic field (e.g. hapmeet-user-images)
+  if (typeof userOrVendor.profilePic === 'string' && userOrVendor.profilePic.trim().length > 0) {
+    return normalizeS3ProfileUrl(userOrVendor.profilePic.trim());
+  }
+
+  // 2. Latest active userProfilePic array entry
+  if (Array.isArray(userOrVendor.userProfilePic) && userOrVendor.userProfilePic.length > 0) {
+    for (let i = userOrVendor.userProfilePic.length - 1; i >= 0; i -= 1) {
+      const p = userOrVendor.userProfilePic[i];
+      if (p) {
+        if (typeof p === 'string' && p.trim().length > 0) {
+          return normalizeS3ProfileUrl(p.trim());
+        }
+        if (typeof p === 'object') {
+          if (!p.isDeleted && !p.deleted && typeof p.url === 'string' && p.url.trim().length > 0) {
+            return normalizeS3ProfileUrl(p.url.trim());
+          }
+          if (typeof p.url === 'string' && p.url.trim().length > 0) {
+            return normalizeS3ProfileUrl(p.url.trim());
+          }
+        }
+      }
+    }
+  }
+
+  // 3. Latest active images array entry
+  if (Array.isArray(userOrVendor.images) && userOrVendor.images.length > 0) {
+    for (let i = userOrVendor.images.length - 1; i >= 0; i -= 1) {
+      const img = userOrVendor.images[i];
+      if (img) {
+        if (typeof img === 'string' && img.trim().length > 0) {
+          return normalizeS3ProfileUrl(img.trim());
+        }
+        if (typeof img === 'object') {
+          if (!img.isDeleted && !img.deleted && typeof img.url === 'string' && img.url.trim().length > 0) {
+            return normalizeS3ProfileUrl(img.url.trim());
+          }
+          if (typeof img.url === 'string' && img.url.trim().length > 0) {
+            return normalizeS3ProfileUrl(img.url.trim());
+          }
+        }
+      }
+    }
+  }
+
+  // 4. Fallback to profileImage field
+  if (typeof userOrVendor.profileImage === 'string' && userOrVendor.profileImage.trim().length > 0) {
+    return normalizeS3ProfileUrl(userOrVendor.profileImage.trim());
+  }
+
+  return null;
+};
