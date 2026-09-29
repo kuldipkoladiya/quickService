@@ -38,6 +38,15 @@ export const defaultReviewPopulate = [
  */
 export function formatReviewForUI(reviewDoc) {
   if (!reviewDoc) return null;
+
+  const rawCreatedAt =
+    reviewDoc.createdAt ||
+    (reviewDoc._doc && reviewDoc._doc.createdAt) ||
+    (typeof reviewDoc.get === 'function' ? reviewDoc.get('createdAt') : null) ||
+    (reviewDoc._id && typeof reviewDoc._id.getTimestamp === 'function' ? reviewDoc._id.getTimestamp() : null);
+
+  const createdAt = rawCreatedAt ? new Date(rawCreatedAt).toISOString() : null;
+
   const r = typeof reviewDoc.toJSON === 'function' ? reviewDoc.toJSON() : { ...reviewDoc };
 
   const customerObj = r.customerId && typeof r.customerId === 'object' ? r.customerId : null;
@@ -63,23 +72,23 @@ export function formatReviewForUI(reviewDoc) {
     }
   }
 
-  const time = formatTimeAgo(r.createdAt);
+  const timeAgo = formatTimeAgo(createdAt);
   const reply = r.vendorReply && r.vendorReply.trim().length > 0 ? r.vendorReply.trim() : null;
 
   return {
-    _id: r._id || r.id,
+    _id: r._id || reviewDoc._id || r.id,
     name,
     customerName: name,
     profilePic,
     serviceName,
-    rating: r.rating || 0,
-    review: r.review || '',
-    time,
-    timeAgo: time,
-    createdAt: r.createdAt,
+    rating: reviewDoc.rating !== undefined ? reviewDoc.rating : r.rating || 0,
+    review: reviewDoc.review !== undefined ? reviewDoc.review : r.review || '',
+    time: createdAt,
+    createdAt,
+    timeAgo,
     reply,
     vendorReply: reply,
-    replyAt: reply ? r.vendorRepliedAt || null : null,
+    replyAt: reply ? reviewDoc.vendorRepliedAt || r.vendorRepliedAt || null : null,
   };
 }
 
