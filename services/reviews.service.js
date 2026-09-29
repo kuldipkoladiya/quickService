@@ -237,6 +237,7 @@ export async function getReviewsList(filter, options = {}) {
 export async function getReviewsListWithPagination(filter, options = {}) {
   const paginateOptions = {
     ...options,
+    customLabels: { docs: 'docs', totalDocs: 'totalDocs' },
     populate: options.populate !== false ? options.populate || defaultReviewPopulate : undefined,
     sort: options.sort || { createdAt: -1 },
     useCustomCountFn: (query) => Reviews.countDocuments(query).exec(),

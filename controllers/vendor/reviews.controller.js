@@ -1,12 +1,10 @@
+import mongoose from 'mongoose';
 import httpStatus from 'http-status';
 import { VendorUser } from 'models';
 import { reviewsService, notificationService } from 'services';
 import ApiError from 'utils/ApiError';
 import { catchAsync } from 'utils/catchAsync';
 
-/**
- * Resolve vendor's VendorUser._id from req.user
- */
 /**
  * Resolve vendor's possible VendorUser._id and User._id from req.user
  */
@@ -32,8 +30,12 @@ const resolveVendorIds = async (user) => {
  * Build Mongoose filter and pagination/sort options for reviews list
  */
 const buildReviewFilterAndSort = (vendorIds, query) => {
+  const objectIds = vendorIds
+    .filter((id) => id && mongoose.Types.ObjectId.isValid(id))
+    .map((id) => (typeof id === 'string' ? new mongoose.Types.ObjectId(id) : id));
+
   const filter = {
-    vendorId: vendorIds.length === 1 ? vendorIds[0] : { $in: vendorIds },
+    vendorId: objectIds.length === 1 ? objectIds[0] : { $in: objectIds },
     isDeleted: { $ne: true },
   };
 
@@ -88,13 +90,22 @@ export const listReviews = catchAsync(async (req, res) => {
     reviewsService.getVendorReviewStats(vendorIds),
   ]);
 
-  const formattedDocs = (reviewsData.docs || []).map(reviewsService.formatReviewForUI);
+  // Support both customLabels.docs ('results') and default ('docs')
+  const rawDocs = reviewsData.results || reviewsData.docs || [];
+  let totalCount = rawDocs.length;
+  if (reviewsData.totalResults !== undefined) {
+    totalCount = reviewsData.totalResults;
+  } else if (reviewsData.totalDocs !== undefined) {
+    totalCount = reviewsData.totalDocs;
+  }
+
+  const formattedDocs = rawDocs.map(reviewsService.formatReviewForUI);
 
   return res.status(httpStatus.OK).send({
     results: {
       summary: stats,
       docs: formattedDocs,
-      totalDocs: reviewsData.totalDocs,
+      totalDocs: totalCount,
       limit: reviewsData.limit,
       page: reviewsData.page,
       totalPages: reviewsData.totalPages,
