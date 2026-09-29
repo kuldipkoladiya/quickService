@@ -7,24 +7,33 @@ import { catchAsync } from 'utils/catchAsync';
 /**
  * Resolve vendor's VendorUser._id from req.user
  */
-const resolveVendorId = async (user) => {
-  if (!user) return null;
+/**
+ * Resolve vendor's possible VendorUser._id and User._id from req.user
+ */
+const resolveVendorIds = async (user) => {
+  if (!user) return [];
+  const ids = [user._id];
   const vendorUser = await VendorUser.findOne({
     userId: user._id,
     isDeleted: { $ne: true },
   });
-  if (vendorUser) return vendorUser._id;
+  if (vendorUser) {
+    ids.push(vendorUser._id);
+  }
   const directVendor = await VendorUser.findById(user._id);
-  if (directVendor) return directVendor._id;
-  return user._id;
+  if (directVendor) {
+    ids.push(directVendor._id);
+    if (directVendor.userId) ids.push(directVendor.userId);
+  }
+  return ids;
 };
 
 /**
  * Build Mongoose filter and pagination/sort options for reviews list
  */
-const buildReviewFilterAndSort = (vendorId, query) => {
+const buildReviewFilterAndSort = (vendorIds, query) => {
   const filter = {
-    vendorId,
+    vendorId: vendorIds.length === 1 ? vendorIds[0] : { $in: vendorIds },
     isDeleted: { $ne: true },
   };
 
@@ -71,19 +80,19 @@ const buildReviewFilterAndSort = (vendorId, query) => {
 };
 
 export const listReviews = catchAsync(async (req, res) => {
-  const vendorId = await resolveVendorId(req.user);
-  const { filter, options } = buildReviewFilterAndSort(vendorId, req.query);
+  const vendorIds = await resolveVendorIds(req.user);
+  const { filter, options } = buildReviewFilterAndSort(vendorIds, req.query);
 
   const [reviewsData, stats] = await Promise.all([
     reviewsService.getReviewsListWithPagination(filter, options),
-    reviewsService.getVendorReviewStats(vendorId),
+    reviewsService.getVendorReviewStats(vendorIds),
   ]);
 
   const formattedDocs = (reviewsData.docs || []).map(reviewsService.formatReviewForUI);
 
   return res.status(httpStatus.OK).send({
-    summary: stats,
     results: {
+      summary: stats,
       docs: formattedDocs,
       totalDocs: reviewsData.totalDocs,
       limit: reviewsData.limit,
@@ -98,8 +107,8 @@ export const listReviews = catchAsync(async (req, res) => {
 export const paginateReviews = listReviews;
 
 export const getReviewsSummary = catchAsync(async (req, res) => {
-  const vendorId = await resolveVendorId(req.user);
-  const stats = await reviewsService.getVendorReviewStats(vendorId);
+  const vendorIds = await resolveVendorIds(req.user);
+  const stats = await reviewsService.getVendorReviewStats(vendorIds);
   return res.status(httpStatus.OK).send({ results: stats });
 });
 
@@ -114,7 +123,7 @@ export const getReviews = catchAsync(async (req, res) => {
 });
 
 export const replyToReview = catchAsync(async (req, res) => {
-  const vendorId = await resolveVendorId(req.user);
+  const vendorIds = await resolveVendorIds(req.user);
   const { reviewsId } = req.params;
   const replyText = (req.body.vendorReply || req.body.reply || '').trim();
 
@@ -122,7 +131,7 @@ export const replyToReview = catchAsync(async (req, res) => {
     throw new ApiError(httpStatus.BAD_REQUEST, 'vendorReply or reply is required');
   }
 
-  const updatedReview = await reviewsService.vendorReplyToReview(vendorId, reviewsId, replyText, req.user._id);
+  const updatedReview = await reviewsService.vendorReplyToReview(vendorIds, reviewsId, replyText, req.user._id);
 
   // Send notification to customer that vendor has replied
   const vendorName =

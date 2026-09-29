@@ -124,14 +124,17 @@ export async function recalculateVendorRating(vendorId) {
 
 /**
  * Get comprehensive review statistics and 1-5 star breakdown for a vendor
- * @param {string|ObjectId} vendorId
+ * @param {string|ObjectId|Array<string|ObjectId>} vendorId
  */
 export async function getVendorReviewStats(vendorId) {
   if (!vendorId) return null;
-  const vObjectId = mongoose.Types.ObjectId.isValid(vendorId) ? new mongoose.Types.ObjectId(vendorId) : vendorId;
+  const vendorIds = Array.isArray(vendorId) ? vendorId : [vendorId];
+  const objectIds = vendorIds
+    .filter((id) => mongoose.Types.ObjectId.isValid(id))
+    .map((id) => new mongoose.Types.ObjectId(id));
 
   const match = {
-    vendorId: vObjectId,
+    vendorId: objectIds.length === 1 ? objectIds[0] : { $in: objectIds },
     isDeleted: { $ne: true },
   };
 
@@ -187,6 +190,7 @@ export async function getVendorReviewStats(vendorId) {
   });
 
   return {
+    rating: avgRating,
     averageRating: avgRating,
     totalReviews,
     totalReviewsFormatted: formatNumberK(totalReviews),
@@ -372,9 +376,6 @@ export async function removeCustomerReview(customerId, reviewsId) {
   return { message: 'Review deleted successfully' };
 }
 
-/**
- * Vendor replies to a customer review
- */
 export async function vendorReplyToReview(vendorId, reviewsId, vendorReply, vendorUserId) {
   const review = await Reviews.findOne({ _id: reviewsId, isDeleted: { $ne: true } });
   if (!review) {
@@ -382,7 +383,9 @@ export async function vendorReplyToReview(vendorId, reviewsId, vendorReply, vend
   }
 
   // Verify vendor ownership
-  if (review.vendorId && review.vendorId.toString() !== vendorId.toString()) {
+  const allowedIds = Array.isArray(vendorId) ? vendorId.map((id) => id.toString()) : [vendorId.toString()];
+
+  if (review.vendorId && !allowedIds.includes(review.vendorId.toString())) {
     throw new ApiError(httpStatus.FORBIDDEN, 'You are not authorized to reply to this review');
   }
 
