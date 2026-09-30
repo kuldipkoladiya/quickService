@@ -2,7 +2,7 @@ import ApiError from 'utils/ApiError';
 import httpStatus from 'http-status';
 import mongoose from 'mongoose';
 import { VendorUser, User, Bank, Categories, VendorService, BusinessAddress, VendorAvailability, Reviews } from 'models';
-import { generateOtp, normalizeS3ProfileUrl } from 'utils/common';
+import { generateOtp, normalizeS3ProfileUrl, extractProfilePic } from 'utils/common';
 import { countryCodeService, emailService } from 'services';
 import { EnumCodeTypeOfCode } from 'models/enum.model';
 import { sendOtpToMobile } from './mobileotp.service';
@@ -515,7 +515,15 @@ export async function getVendorUserDetailsWithServices(vendorUserId) {
       .limit(5)
       .populate({
         path: 'customerId',
-        select: 'name fullName email mobileNumber countryCode profileImage profilePic userProfilePic',
+        select: 'name fullName email mobileNumber countryCode profileImage profilePic userProfilePic images',
+      })
+      .populate({
+        path: 'vendorId',
+        select: 'userId businessName name',
+        populate: {
+          path: 'userId',
+          select: 'name fullName businessName profilePic profileImage userProfilePic images',
+        },
       })
       .lean(),
     // Fast database-level aggregation for total count, average, and star breakdown
@@ -601,22 +609,78 @@ export async function getVendorUserDetailsWithServices(vendorUserId) {
     return '';
   }
 
-  // Format only the latest 5 reviews with only the requested fields
+  // Extract vendor user's active profile picture and business/display name
+  const vendorUserAccount = vendorUser.userId && typeof vendorUser.userId === 'object' ? vendorUser.userId : {};
+  const vendorProfilePic =
+    extractProfilePic(vendorUserAccount) ||
+    extractCustomerProfilePic(vendorUserAccount) ||
+    extractProfilePic(vendorUser) ||
+    '';
+  const vendorDisplayName =
+    vendorUser.businessName ||
+    vendorUserAccount.businessName ||
+    vendorUserAccount.fullName ||
+    vendorUserAccount.name ||
+    'Vendor';
+
+  // Format only the latest 5 reviews with all UI requested fields (including vendor reply & vendor profile pic)
   const formattedReviews = reviewsList.map((rev) => {
     const cust = rev.customerId && typeof rev.customerId === 'object' ? rev.customerId : {};
     const customerName = cust.fullName || cust.name || 'Customer';
-    const profilePic = extractCustomerProfilePic(cust);
+    const profilePic = extractCustomerProfilePic(cust) || extractProfilePic(cust) || '';
     const ratingValue = rev.rating !== undefined && rev.rating !== null ? Number(rev.rating) : 0;
     const reviewId = rev._id ? rev._id.toString() : rev.id;
+
+    // Determine vendor details for this review (fallback to current vendor's details)
+    let revVendorPic = vendorProfilePic;
+    let revVendorName = vendorDisplayName;
+
+    if (rev.vendorId && typeof rev.vendorId === 'object') {
+      const vUser = rev.vendorId.userId && typeof rev.vendorId.userId === 'object' ? rev.vendorId.userId : rev.vendorId;
+      const pic = extractProfilePic(vUser) || extractCustomerProfilePic(vUser) || extractProfilePic(rev.vendorId);
+      if (pic) revVendorPic = pic;
+      const vName =
+        rev.vendorId.businessName || (vUser && (vUser.businessName || vUser.fullName || vUser.name)) || rev.vendorId.name;
+      if (vName) revVendorName = vName;
+    }
+
+    const hasReply = Boolean(rev.vendorReply && rev.vendorReply.trim().length > 0);
+    const replyText = hasReply ? rev.vendorReply.trim() : null;
+    const repliedAt = hasReply ? rev.vendorRepliedAt || null : null;
+
+    const reviewReplyObj = hasReply
+      ? {
+          reply: replyText,
+          vendorReply: replyText,
+          vendorName: revVendorName,
+          vendorProfilePic: revVendorPic,
+          profilePic: revVendorPic,
+          replyAt: repliedAt,
+          vendorRepliedAt: repliedAt,
+          replyTime: repliedAt,
+          createdAt: repliedAt,
+        }
+      : null;
 
     return {
       id: reviewId,
       _id: rev._id || reviewId,
       customerName,
       userProfilePic: profilePic,
+      profilePic,
       stars: ratingValue,
+      rating: ratingValue,
       review: rev.review || '',
       reviewTime: rev.createdAt,
+      createdAt: rev.createdAt,
+      reply: replyText,
+      vendorReply: replyText,
+      replyAt: repliedAt,
+      vendorRepliedAt: repliedAt,
+      replyTime: repliedAt,
+      vendorProfilePic: revVendorPic,
+      vendorName: revVendorName,
+      reviewReply: reviewReplyObj,
     };
   });
 
@@ -674,6 +738,9 @@ export async function getVendorUserDetailsWithServices(vendorUserId) {
   vendorUserObj.averageRating = averageRating;
   vendorUserObj.averageReview = averageRating;
   vendorUserObj.totalReviews = totalReviews;
+  vendorUserObj.profilePic = vendorProfilePic;
+  vendorUserObj.vendorProfilePic = vendorProfilePic;
+  vendorUserObj.profileImage = vendorProfilePic;
   vendorUserObj.reviews = formattedReviews;
 
   // Sync back to db asynchronously in background without blocking response
@@ -689,6 +756,8 @@ export async function getVendorUserDetailsWithServices(vendorUserId) {
     businessAddress,
     services,
     vendorAvailability: availabilityInfo,
+    vendorProfilePic,
+    profilePic: vendorProfilePic,
     rating: averageRating,
     averageRating,
     averageReview: averageRating,

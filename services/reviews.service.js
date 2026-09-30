@@ -31,6 +31,14 @@ export const defaultReviewPopulate = [
       },
     ],
   },
+  {
+    path: 'vendorId',
+    select: 'businessName userId name',
+    populate: {
+      path: 'userId',
+      select: 'fullName name businessName profilePic profileImage userProfilePic images',
+    },
+  },
 ];
 
 /**
@@ -72,14 +80,43 @@ export function formatReviewForUI(reviewDoc) {
     }
   }
 
+  // Extract vendor profile pic and name if available
+  let vendorProfilePic = null;
+  let vendorName = null;
+  if (r.vendorId && typeof r.vendorId === 'object') {
+    const vUser = r.vendorId.userId && typeof r.vendorId.userId === 'object' ? r.vendorId.userId : r.vendorId;
+    vendorProfilePic = extractProfilePic(vUser) || extractProfilePic(r.vendorId) || null;
+    vendorName =
+      r.vendorId.businessName ||
+      (vUser && (vUser.businessName || vUser.fullName || vUser.name)) ||
+      r.vendorId.name ||
+      'Vendor';
+  }
+
   const timeAgo = formatTimeAgo(createdAt);
   const reply = r.vendorReply && r.vendorReply.trim().length > 0 ? r.vendorReply.trim() : null;
+  const repliedAt = reply ? reviewDoc.vendorRepliedAt || r.vendorRepliedAt || null : null;
+
+  const reviewReply = reply
+    ? {
+        reply,
+        vendorReply: reply,
+        vendorName,
+        vendorProfilePic,
+        profilePic: vendorProfilePic,
+        replyAt: repliedAt,
+        vendorRepliedAt: repliedAt,
+        replyTime: repliedAt,
+        createdAt: repliedAt,
+      }
+    : null;
 
   return {
     _id: r._id || reviewDoc._id || r.id,
     name,
     customerName: name,
     profilePic,
+    userProfilePic: profilePic,
     serviceName,
     rating: reviewDoc.rating !== undefined ? reviewDoc.rating : r.rating || 0,
     review: reviewDoc.review !== undefined ? reviewDoc.review : r.review || '',
@@ -88,7 +125,12 @@ export function formatReviewForUI(reviewDoc) {
     timeAgo,
     reply,
     vendorReply: reply,
-    replyAt: reply ? reviewDoc.vendorRepliedAt || r.vendorRepliedAt || null : null,
+    replyAt: repliedAt,
+    vendorRepliedAt: repliedAt,
+    replyTime: repliedAt,
+    vendorProfilePic,
+    vendorName,
+    reviewReply,
   };
 }
 
