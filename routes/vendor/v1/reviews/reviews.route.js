@@ -49,9 +49,17 @@ router
 router
   .route('/:reviewsId/reply')
   /**
-   * Vendor Reply to Customer Review (Create or Update Reply)
+   * Vendor Reply to Customer Review (Create Reply)
    */
   .post(auth('vendor'), validate(reviewsValidation.replyReview), reviewsController.replyToReview)
-  .put(auth('vendor'), validate(reviewsValidation.replyReview), reviewsController.replyToReview);
+  /**
+   * Vendor Edit / Update Reply to Customer Review
+   */
+  .put(auth('vendor'), validate(reviewsValidation.editReviewReply), reviewsController.editReviewReply)
+  .patch(auth('vendor'), validate(reviewsValidation.editReviewReply), reviewsController.editReviewReply)
+  /**
+   * Vendor Delete Reply to Customer Review
+   */
+  .delete(auth('vendor'), validate(reviewsValidation.deleteReviewReply), reviewsController.deleteReviewReply);
 
 export default router;

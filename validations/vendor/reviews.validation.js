@@ -50,6 +50,14 @@ export const replyReview = {
     .or('vendorReply', 'reply'),
 };
 
+export const editReviewReply = replyReview;
+
+export const deleteReviewReply = {
+  params: Joi.object().keys({
+    reviewsId: Joi.objectId().required(),
+  }),
+};
+
 export const createReviews = {
   body: Joi.object().keys({
     bookingId: Joi.objectId(),

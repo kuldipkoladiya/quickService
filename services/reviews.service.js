@@ -450,6 +450,45 @@ export async function vendorReplyToReview(vendorId, reviewsId, vendorReply, vend
   return Reviews.findById(review._id).populate(defaultReviewPopulate);
 }
 
+/**
+ * Vendor deletes their reply to a review
+ * @param {string|ObjectId|Array} vendorId
+ * @param {string|ObjectId} reviewsId
+ * @param {string|ObjectId} vendorUserId
+ */
+export async function vendorDeleteReviewReply(vendorId, reviewsId, vendorUserId) {
+  const review = await Reviews.findOne({ _id: reviewsId, isDeleted: { $ne: true } });
+  if (!review) {
+    throw new ApiError(httpStatus.NOT_FOUND, 'Review not found');
+  }
+
+  // Verify vendor ownership
+  const allowedIds = Array.isArray(vendorId) ? vendorId.map((id) => id.toString()) : [vendorId.toString()];
+
+  if (review.vendorId && !allowedIds.includes(review.vendorId.toString())) {
+    throw new ApiError(httpStatus.FORBIDDEN, 'You are not authorized to delete reply for this review');
+  }
+
+  if (!review.vendorReply && !review.vendorRepliedAt) {
+    throw new ApiError(httpStatus.BAD_REQUEST, 'This review has no reply to delete');
+  }
+
+  review.vendorReply = undefined;
+  review.vendorRepliedAt = undefined;
+  review.updatedBy = vendorUserId;
+  await review.save();
+
+  await Reviews.updateOne(
+    { _id: review._id },
+    {
+      $unset: { vendorReply: 1, vendorRepliedAt: 1 },
+      $set: { updatedBy: vendorUserId },
+    }
+  );
+
+  return Reviews.findById(review._id).populate(defaultReviewPopulate);
+}
+
 export async function createReviews(body = {}) {
   if (body.bookingId) {
     const booking = await Bookings.findOne({ _id: body.bookingId });

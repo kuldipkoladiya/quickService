@@ -165,6 +165,39 @@ export const replyToReview = catchAsync(async (req, res) => {
   });
 });
 
+export const editReviewReply = catchAsync(async (req, res) => {
+  const vendorIds = await resolveVendorIds(req.user);
+  const { reviewsId } = req.params;
+  const replyText = (req.body.vendorReply || req.body.reply || '').trim();
+
+  if (!replyText) {
+    throw new ApiError(httpStatus.BAD_REQUEST, 'vendorReply or reply is required');
+  }
+
+  const updatedReview = await reviewsService.vendorReplyToReview(vendorIds, reviewsId, replyText, req.user._id);
+
+  const formattedReview = reviewsService.formatReviewForUI(updatedReview);
+
+  return res.status(httpStatus.OK).send({
+    message: 'Review reply updated successfully',
+    results: formattedReview,
+  });
+});
+
+export const deleteReviewReply = catchAsync(async (req, res) => {
+  const vendorIds = await resolveVendorIds(req.user);
+  const { reviewsId } = req.params;
+
+  const updatedReview = await reviewsService.vendorDeleteReviewReply(vendorIds, reviewsId, req.user._id);
+
+  const formattedReview = reviewsService.formatReviewForUI(updatedReview);
+
+  return res.status(httpStatus.OK).send({
+    message: 'Review reply deleted successfully',
+    results: formattedReview,
+  });
+});
+
 export const createReviews = catchAsync(async (req, res) => {
   const { body } = req;
   body.createdBy = req.user._id;
