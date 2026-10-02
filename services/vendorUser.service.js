@@ -1,7 +1,17 @@
 import ApiError from 'utils/ApiError';
 import httpStatus from 'http-status';
 import mongoose from 'mongoose';
-import { VendorUser, User, Bank, Categories, VendorService, BusinessAddress, VendorAvailability, Reviews } from 'models';
+import {
+  VendorUser,
+  User,
+  Bank,
+  Categories,
+  VendorService,
+  BusinessAddress,
+  VendorAvailability,
+  Reviews,
+  FavoriteVendor,
+} from 'models';
 import { generateOtp, normalizeS3ProfileUrl, extractProfilePic } from 'utils/common';
 import { countryCodeService, emailService } from 'services';
 import { EnumCodeTypeOfCode } from 'models/enum.model';
@@ -277,7 +287,7 @@ export async function updateVendorProfile(user, body) {
   };
 }
 
-export async function getNearVendorUsersByCategory(longitude, latitude, categoryId, options = {}) {
+export async function getNearVendorUsersByCategory(longitude, latitude, categoryId, options = {}, customerId = null) {
   const { page = 1, limit = 10 } = options;
   const skip = (page - 1) * limit;
 
@@ -387,6 +397,24 @@ export async function getNearVendorUsersByCategory(longitude, latitude, category
   const total = (results[0] && results[0].metadata && results[0].metadata[0] && results[0].metadata[0].total) || 0;
   const data = (results[0] && results[0].data) || [];
 
+  const favVendorIds = new Set();
+  if (customerId && data.length > 0) {
+    const candidateVendorIds = [];
+    data.forEach((d) => {
+      if (d._id) candidateVendorIds.push(d._id);
+      const uid = (d.userId && d.userId._id) || d.userId;
+      if (uid) candidateVendorIds.push(uid);
+    });
+    const favs = await FavoriteVendor.find({
+      userId: customerId,
+      vendorId: { $in: candidateVendorIds },
+      isDeleted: { $ne: true },
+    }).lean();
+    favs.forEach((f) => {
+      if (f.vendorId) favVendorIds.add(f.vendorId.toString());
+    });
+  }
+
   const dayNames = ['sunday', 'monday', 'tuesday', 'wednesday', 'thursday', 'friday', 'saturday'];
   const todayDayName = dayNames[new Date().getDay()];
 
@@ -438,7 +466,9 @@ export async function getNearVendorUsersByCategory(longitude, latitude, category
     const profilePicVal = (doc.userId && (doc.userId.profilePic || doc.userId.profileImage)) || null;
     const categoryTitleVal = (doc.categoryDetails && doc.categoryDetails.title) || null;
     const rating = doc.rating !== undefined && doc.rating !== null ? Number(doc.rating) : 0;
-    const totalReviews = doc.totalReviews !== undefined && doc.totalReviews !== null ? Number(doc.totalReviews) : 0;
+    const uidString = doc.userId && (doc.userId._id || doc.userId) ? (doc.userId._id || doc.userId).toString() : null;
+    const docIdString = doc._id ? doc._id.toString() : null;
+    const isFavorite = favVendorIds.has(docIdString) || (uidString && favVendorIds.has(uidString));
 
     return {
       _id: doc._id,
@@ -452,6 +482,7 @@ export async function getNearVendorUsersByCategory(longitude, latitude, category
       rating,
       averageRating: rating,
       totalReviews,
+      isFavorite: Boolean(isFavorite),
       vendorAvailability: {
         isOnline,
         storeStatus,
@@ -474,7 +505,7 @@ export async function getNearVendorUsersByCategory(longitude, latitude, category
   };
 }
 
-export async function getVendorUserDetailsWithServices(vendorUserId) {
+export async function getVendorUserDetailsWithServices(vendorUserId, customerId = null) {
   const vendorUser = await VendorUser.findById(vendorUserId).populate('userId').populate('categoryId');
 
   if (!vendorUser) {
@@ -499,7 +530,7 @@ export async function getVendorUserDetailsWithServices(vendorUserId) {
   };
 
   // Run all independent queries concurrently in a single round-trip with .lean() for zero-overhead performance
-  const [services, businessAddress, va, reviewsList, statsFacet] = await Promise.all([
+  const [services, businessAddress, va, reviewsList, statsFacet, favRecord] = await Promise.all([
     VendorService.find({ vendorId: vendorUserId, isDeleted: { $ne: true } })
       .populate('serviceId')
       .populate('categoryId')
@@ -551,7 +582,16 @@ export async function getVendorUserDetailsWithServices(vendorUserId) {
         },
       },
     ]),
+    customerId
+      ? FavoriteVendor.findOne({
+          userId: customerId,
+          vendorId: { $in: targetVendorIds },
+          isDeleted: { $ne: true },
+        }).lean()
+      : null,
   ]);
+
+  const isFavorite = Boolean(favRecord);
 
   // Process rating & review statistics natively calculated by MongoDB
   const summary = (statsFacet[0] && statsFacet[0].summary && statsFacet[0].summary[0]) || null;
@@ -742,6 +782,7 @@ export async function getVendorUserDetailsWithServices(vendorUserId) {
   vendorUserObj.vendorProfilePic = vendorProfilePic;
   vendorUserObj.profileImage = vendorProfilePic;
   vendorUserObj.reviews = formattedReviews;
+  vendorUserObj.isFavorite = isFavorite;
 
   // Sync back to db asynchronously in background without blocking response
   if (vendorUser.rating !== averageRating || vendorUser.totalReviews !== totalReviews) {
@@ -768,5 +809,6 @@ export async function getVendorUserDetailsWithServices(vendorUserId) {
       breakdown: breakdownWithPercentage,
     },
     reviews: formattedReviews,
+    isFavorite,
   };
 }

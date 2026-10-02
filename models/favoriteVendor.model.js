@@ -44,6 +44,7 @@ FavoriteVendorSchema.plugin(softDelete, {
   deletedBy: 'deletedBy',
   deletedAt: 'deletedAt',
 });
+FavoriteVendorSchema.index({ userId: 1, vendorId: 1 });
 const FavoriteVendorModel =
   mongoose.models.FavoriteVendor || mongoose.model('FavoriteVendor', FavoriteVendorSchema, 'FavoriteVendor');
 module.exports = FavoriteVendorModel;

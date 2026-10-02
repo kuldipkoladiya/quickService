@@ -7,10 +7,22 @@ import Joi from 'joi';
 Joi.objectId = require('joi-objectid')(Joi);
 
 export const createFavoriteVendor = {
-  body: Joi.object().keys({
-    userId: Joi.objectId(),
-    vendorId: Joi.objectId(),
-  }),
+  body: Joi.object()
+    .keys({
+      vendorId: Joi.objectId(),
+      vendorUserId: Joi.objectId(),
+      userId: Joi.objectId(),
+    })
+    .or('vendorId', 'vendorUserId'),
+};
+
+export const toggleFavoriteVendor = {
+  body: Joi.object()
+    .keys({
+      vendorId: Joi.objectId(),
+      vendorUserId: Joi.objectId(),
+    })
+    .or('vendorId', 'vendorUserId'),
 };
 
 export const updateFavoriteVendor = {
@@ -32,6 +44,18 @@ export const getFavoriteVendorById = {
 export const deleteFavoriteVendorById = {
   params: Joi.object().keys({
     favoriteVendorId: Joi.objectId().required(),
+  }),
+};
+
+export const deleteFavoriteByVendorId = {
+  params: Joi.object().keys({
+    vendorId: Joi.objectId().required(),
+  }),
+};
+
+export const checkFavoriteVendor = {
+  params: Joi.object().keys({
+    vendorId: Joi.objectId().required(),
   }),
 };
 

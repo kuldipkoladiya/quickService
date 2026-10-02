@@ -4,7 +4,8 @@ import { catchAsync } from 'utils/catchAsync';
 
 export const getVendorUser = catchAsync(async (req, res) => {
   const { vendorUserId } = req.params;
-  const result = await vendorUserService.getVendorUserDetailsWithServices(vendorUserId);
+  const customerId = req.user ? req.user._id : null;
+  const result = await vendorUserService.getVendorUserDetailsWithServices(vendorUserId, customerId);
   return res.status(httpStatus.OK).send({ results: result });
 });
 
@@ -59,10 +60,17 @@ export const getVendorUsersByCategory = catchAsync(async (req, res, next) => {
     const pageNum = parseInt(page, 10) || 1;
     const limitNum = parseInt(limit, 10) || 10;
 
-    const results = await vendorUserService.getNearVendorUsersByCategory(longitude, latitude, categoryId, {
-      page: pageNum,
-      limit: limitNum,
-    });
+    const customerId = req.user ? req.user._id : null;
+    const results = await vendorUserService.getNearVendorUsersByCategory(
+      longitude,
+      latitude,
+      categoryId,
+      {
+        page: pageNum,
+        limit: limitNum,
+      },
+      customerId
+    );
     return res.status(httpStatus.OK).send({ results });
   } catch (err) {
     console.error('STACK TRACE:', err.stack || err);
