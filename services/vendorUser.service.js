@@ -466,6 +466,7 @@ export async function getNearVendorUsersByCategory(longitude, latitude, category
     const profilePicVal = (doc.userId && (doc.userId.profilePic || doc.userId.profileImage)) || null;
     const categoryTitleVal = (doc.categoryDetails && doc.categoryDetails.title) || null;
     const rating = doc.rating !== undefined && doc.rating !== null ? Number(doc.rating) : 0;
+    const totalReviews = doc.totalReviews !== undefined && doc.totalReviews !== null ? Number(doc.totalReviews) : 0;
     const uidString = doc.userId && (doc.userId._id || doc.userId) ? (doc.userId._id || doc.userId).toString() : null;
     const docIdString = doc._id ? doc._id.toString() : null;
     const isFavorite = favVendorIds.has(docIdString) || (uidString && favVendorIds.has(uidString));
