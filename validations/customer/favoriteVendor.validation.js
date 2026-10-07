@@ -65,6 +65,10 @@ export const getFavoriteVendor = {
     .keys({
       page: Joi.number(),
       limit: Joi.number(),
+      latitude: Joi.number(),
+      longitude: Joi.number(),
+      lat: Joi.number(),
+      lng: Joi.number(),
     })
     .unknown(true),
 };
@@ -75,6 +79,10 @@ export const paginatedFavoriteVendor = {
     .keys({
       page: Joi.number().default(1),
       limit: Joi.number().default(10).max(100),
+      latitude: Joi.number(),
+      longitude: Joi.number(),
+      lat: Joi.number(),
+      lng: Joi.number(),
     })
     .unknown(true),
 };

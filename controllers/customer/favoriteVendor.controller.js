@@ -21,24 +21,28 @@ export const getFavoriteVendor = catchAsync(async (req, res) => {
 });
 
 export const listFavoriteVendor = catchAsync(async (req, res) => {
-  const { page, limit } = req.query;
+  const { page, limit, latitude, longitude, lat, lng } = req.query;
   const options = {
     page,
     limit,
+    latitude: latitude || lat,
+    longitude: longitude || lng,
     isPaginated: Boolean(page || limit),
   };
-  const response = await favoriteVendorService.getCustomerFavoriteVendorList(req.user._id, options);
+  const response = await favoriteVendorService.getCustomerFavoriteVendorList(req.user._id, options, req.user);
   return res.status(httpStatus.OK).send(response);
 });
 
 export const paginateFavoriteVendor = catchAsync(async (req, res) => {
-  const { page = 1, limit = 10 } = req.query;
+  const { page = 1, limit = 10, latitude, longitude, lat, lng } = req.query;
   const options = {
     page,
     limit,
+    latitude: latitude || lat,
+    longitude: longitude || lng,
     isPaginated: true,
   };
-  const response = await favoriteVendorService.getCustomerFavoriteVendorList(req.user._id, options);
+  const response = await favoriteVendorService.getCustomerFavoriteVendorList(req.user._id, options, req.user);
   return res.status(httpStatus.OK).send(response);
 });
 

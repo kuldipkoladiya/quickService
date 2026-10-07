@@ -5,8 +5,80 @@
 import mongoose from 'mongoose';
 import ApiError from 'utils/ApiError';
 import httpStatus from 'http-status';
-import { FavoriteVendor, User, VendorUser, VendorAvailability } from 'models';
+import { FavoriteVendor, User, VendorUser, VendorAvailability, Address } from 'models';
 import { extractProfilePic } from 'utils/common';
+import { calculateVisitCharges } from './vendorUser.service';
+
+/**
+ * Calculate distance between two coordinates in kilometers using Haversine formula
+ */
+export function calculateDistanceInKm(lat1, lon1, lat2, lon2) {
+  if (
+    lat1 === undefined ||
+    lat1 === null ||
+    lon1 === undefined ||
+    lon1 === null ||
+    lat2 === undefined ||
+    lat2 === null ||
+    lon2 === undefined ||
+    lon2 === null ||
+    Number.isNaN(Number(lat1)) ||
+    Number.isNaN(Number(lon1)) ||
+    Number.isNaN(Number(lat2)) ||
+    Number.isNaN(Number(lon2))
+  ) {
+    return null;
+  }
+  const R = 6371; // Earth's radius in km
+  const dLat = ((Number(lat2) - Number(lat1)) * Math.PI) / 180;
+  const dLon = ((Number(lon2) - Number(lon1)) * Math.PI) / 180;
+  const a =
+    Math.sin(dLat / 2) * Math.sin(dLat / 2) +
+    Math.cos((Number(lat1) * Math.PI) / 180) *
+      Math.cos((Number(lat2) * Math.PI) / 180) *
+      Math.sin(dLon / 2) *
+      Math.sin(dLon / 2);
+  const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+  const dist = R * c;
+  return Math.round(dist * 100) / 100;
+}
+
+/**
+ * Compute vendor visiting charges based on service radius tiers and distance in km
+ */
+export function computeVendorCharges(vendorUser, distanceKm = null) {
+  let visitCharges = vendorUser && vendorUser.visitCharges;
+  if (!visitCharges || !Array.isArray(visitCharges) || visitCharges.length === 0) {
+    const radius = (vendorUser && vendorUser.serviceRadius) || 15;
+    visitCharges = calculateVisitCharges(radius);
+  }
+
+  let matchedCharge = null;
+  if (distanceKm !== null && distanceKm !== undefined && Array.isArray(visitCharges) && visitCharges.length > 0) {
+    const matched = visitCharges.find((vc) => distanceKm >= vc.minDistance && distanceKm <= vc.maxDistance);
+    if (matched && matched.charge !== undefined && matched.charge !== null) {
+      matchedCharge = matched.charge;
+    } else {
+      const lastTier = visitCharges[visitCharges.length - 1];
+      if (lastTier && distanceKm > lastTier.maxDistance) {
+        matchedCharge = lastTier.charge;
+      }
+    }
+  }
+
+  if (matchedCharge === null) {
+    if (Array.isArray(visitCharges) && visitCharges.length > 0 && visitCharges[0] && visitCharges[0].charge !== undefined) {
+      matchedCharge = visitCharges[0].charge;
+    } else {
+      matchedCharge = 100;
+    }
+  }
+
+  return {
+    charge: matchedCharge,
+    visitCharges,
+  };
+}
 
 export async function getFavoriteVendorById(id, options = {}) {
   const favoriteVendor = await FavoriteVendor.findById(id, options.projection, options);
@@ -221,7 +293,7 @@ export async function removeCustomerFavoriteVendor(userId, targetId) {
 /**
  * Get customer's list of favorite vendors with rich vendor information
  */
-export async function getCustomerFavoriteVendorList(userId, options = {}) {
+export async function getCustomerFavoriteVendorList(userId, options = {}, currentUser = null) {
   const page = Math.max(1, parseInt(options.page, 10) || 1);
   const limit = Math.max(1, parseInt(options.limit, 10) || (options.isPaginated ? 10 : 100));
   const skip = (page - 1) * limit;
@@ -232,6 +304,84 @@ export async function getCustomerFavoriteVendorList(userId, options = {}) {
     isDeleted: { $ne: true },
   };
 
+  // Resolve customer location coordinates
+  let customerLat = null;
+  let customerLon = null;
+
+  if (
+    options.latitude !== undefined &&
+    options.latitude !== null &&
+    options.longitude !== undefined &&
+    options.longitude !== null
+  ) {
+    const pLat = parseFloat(options.latitude);
+    const pLon = parseFloat(options.longitude);
+    if (!Number.isNaN(pLat) && !Number.isNaN(pLon)) {
+      customerLat = pLat;
+      customerLon = pLon;
+    }
+  }
+
+  if (customerLat === null || customerLon === null) {
+    const custUser = currentUser || (await User.findById(uObjectId).select('location latitude longitude').lean());
+    if (
+      custUser &&
+      custUser.location &&
+      Array.isArray(custUser.location.coordinates) &&
+      custUser.location.coordinates.length === 2
+    ) {
+      const [lon, lat] = custUser.location.coordinates;
+      if (!Number.isNaN(Number(lat)) && !Number.isNaN(Number(lon))) {
+        customerLat = Number(lat);
+        customerLon = Number(lon);
+      }
+    } else if (
+      custUser &&
+      custUser.latitude !== undefined &&
+      custUser.latitude !== null &&
+      custUser.longitude !== undefined &&
+      custUser.longitude !== null
+    ) {
+      customerLat = Number(custUser.latitude);
+      customerLon = Number(custUser.longitude);
+    }
+  }
+
+  if (customerLat === null || customerLon === null) {
+    try {
+      const defaultAddr = await Address.findOne({
+        userId: uObjectId,
+        isDeleted: { $ne: true },
+      })
+        .sort({ isDefault: -1, updatedAt: -1 })
+        .lean();
+
+      if (
+        defaultAddr &&
+        defaultAddr.location &&
+        Array.isArray(defaultAddr.location.coordinates) &&
+        defaultAddr.location.coordinates.length === 2
+      ) {
+        const [lon, lat] = defaultAddr.location.coordinates;
+        if (!Number.isNaN(Number(lat)) && !Number.isNaN(Number(lon))) {
+          customerLat = Number(lat);
+          customerLon = Number(lon);
+        }
+      } else if (
+        defaultAddr &&
+        defaultAddr.latitude !== undefined &&
+        defaultAddr.latitude !== null &&
+        defaultAddr.longitude !== undefined &&
+        defaultAddr.longitude !== null
+      ) {
+        customerLat = Number(defaultAddr.latitude);
+        customerLon = Number(defaultAddr.longitude);
+      }
+    } catch (e) {
+      // Ignore address lookup failure
+    }
+  }
+
   const totalDocs = await FavoriteVendor.countDocuments(filter);
 
   const query = FavoriteVendor.find(filter)
@@ -241,7 +391,8 @@ export async function getCustomerFavoriteVendorList(userId, options = {}) {
       populate: [
         {
           path: 'userId',
-          select: 'name fullName email mobileNumber countryCode profileImage profilePic userProfilePic images location',
+          select:
+            'name fullName email mobileNumber countryCode profileImage profilePic userProfilePic images location latitude longitude',
         },
         {
           path: 'categoryId',
@@ -311,6 +462,25 @@ export async function getCustomerFavoriteVendorList(userId, options = {}) {
       statusBadge = 'schedule';
     }
 
+    // Resolve vendor coordinates
+    let vendorLat = null;
+    let vendorLon = null;
+
+    if (u.location && Array.isArray(u.location.coordinates) && u.location.coordinates.length === 2) {
+      [vendorLon, vendorLat] = u.location.coordinates;
+    } else if (vu.location && Array.isArray(vu.location.coordinates) && vu.location.coordinates.length === 2) {
+      [vendorLon, vendorLat] = vu.location.coordinates;
+    } else if (u.latitude !== undefined && u.latitude !== null && u.longitude !== undefined && u.longitude !== null) {
+      vendorLat = Number(u.latitude);
+      vendorLon = Number(u.longitude);
+    } else if (vu.latitude !== undefined && vu.latitude !== null && vu.longitude !== undefined && vu.longitude !== null) {
+      vendorLat = Number(vu.latitude);
+      vendorLon = Number(vu.longitude);
+    }
+
+    const distance = calculateDistanceInKm(customerLat, customerLon, vendorLat, vendorLon);
+    const { charge, visitCharges: computedVisitCharges } = computeVendorCharges(vu, distance);
+
     const vendorPic = extractProfilePic(u) || extractProfilePic(vu) || '';
     const businessName = vu.businessName || u.businessName || u.fullName || u.name || 'Vendor';
     const rating = vu.rating !== undefined && vu.rating !== null ? Number(vu.rating) : 0;
@@ -344,6 +514,11 @@ export async function getCustomerFavoriteVendorList(userId, options = {}) {
       categoryTitle: vu.categoryId?.title || '',
       categoryDetails: vu.categoryId || null,
       isFavorite: true,
+      distance,
+      charges: charge,
+      charge,
+      visitCharge: charge,
+      visitCharges: computedVisitCharges,
       vendorAvailability: availabilityInfo,
       vendorUser: {
         ...vu,
@@ -355,6 +530,11 @@ export async function getCustomerFavoriteVendorList(userId, options = {}) {
         vendorProfilePic: vendorPic,
         profileImage: vendorPic,
         isFavorite: true,
+        distance,
+        charges: charge,
+        charge,
+        visitCharge: charge,
+        visitCharges: computedVisitCharges,
         vendorAvailability: availabilityInfo,
       },
       createdAt: fav.createdAt,
