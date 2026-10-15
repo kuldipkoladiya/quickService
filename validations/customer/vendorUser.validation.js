@@ -92,6 +92,13 @@ export const getVendorUsersByCategory = {
       longitude: Joi.number().required(),
       page: Joi.number().integer().optional(),
       limit: Joi.number().integer().optional(),
+      filter: Joi.alternatives().try(Joi.string(), Joi.array().items(Joi.string())).optional(),
+      bookingOption: Joi.string().valid('instant', 'schedule').optional(),
+      sortBy: Joi.string().optional(),
+      popular: Joi.alternatives().try(Joi.boolean(), Joi.string()).optional(),
+      within1km: Joi.alternatives().try(Joi.boolean(), Joi.string()).optional(),
+      maxDistance: Joi.number().optional(),
+      minRating: Joi.number().optional(),
     })
     .unknown(true),
 };

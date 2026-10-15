@@ -33,6 +33,17 @@ router
   );
 
 router
+  .route('/category/:categoryId/filter')
+  /**
+   * getVendorUsersByCategory (filter alias)
+   * */
+  .get(
+    auth('customer'),
+    validate(vendorUserValidation.getVendorUsersByCategory),
+    vendorUserController.getVendorUsersByCategory
+  );
+
+router
   .route('/:vendorUserId')
   /**
    * getVendorUserById

@@ -291,6 +291,48 @@ export async function getNearVendorUsersByCategory(longitude, latitude, category
   const { page = 1, limit = 10 } = options;
   const skip = (page - 1) * limit;
 
+  // Parse filter options
+  let filterList = [];
+  if (Array.isArray(options.filter)) {
+    filterList = options.filter;
+  } else if (typeof options.filter === 'string') {
+    filterList = options.filter.split(',').map((f) => f.trim());
+  }
+
+  // Normalize filter tokens (lowercase, alphanumeric only for comparison)
+  const normalizedFilters = filterList.map((f) => f.toLowerCase().replace(/[^a-z0-9]/g, ''));
+
+  // Check filter conditions
+  const isInstantBooking =
+    normalizedFilters.some((f) => f === 'instantbooking' || f === 'instant') ||
+    (options.bookingOption && options.bookingOption.toLowerCase() === 'instant');
+
+  const isScheduleBooking =
+    normalizedFilters.some((f) => f === 'schedulebooking' || f === 'schedule') ||
+    (options.bookingOption && options.bookingOption.toLowerCase() === 'schedule');
+
+  const isPopular =
+    normalizedFilters.some((f) => f.includes('popular') || f.includes('reting') || f.includes('rating')) ||
+    options.popular === true ||
+    options.popular === 'true' ||
+    options.sortBy === 'popular' ||
+    options.sortBy === 'rating';
+
+  const isWithin1Km =
+    normalizedFilters.some(
+      (f) => f.includes('1km') || f.includes('within1km') || (f.includes('within') && f.includes('1'))
+    ) ||
+    options.within1km === true ||
+    options.within1km === 'true' ||
+    (options.maxDistance && Number(options.maxDistance) <= 1000);
+
+  let geoMaxDistance = 15000; // default 15km
+  if (isWithin1Km) {
+    geoMaxDistance = 1000; // 1km in meters
+  } else if (options.maxDistance && !Number.isNaN(Number(options.maxDistance))) {
+    geoMaxDistance = Number(options.maxDistance);
+  }
+
   const matchStage = {
     role: 'vendor',
     isDeleted: { $ne: true },
@@ -304,7 +346,7 @@ export async function getNearVendorUsersByCategory(longitude, latitude, category
           coordinates: [parseFloat(longitude), parseFloat(latitude)],
         },
         distanceField: 'distance',
-        maxDistance: 15000, // 15km limit
+        maxDistance: geoMaxDistance,
         spherical: true,
         query: matchStage,
       },
@@ -342,56 +384,99 @@ export async function getNearVendorUsersByCategory(longitude, latitude, category
       },
     },
     { $unwind: { path: '$vendorAvailability', preserveNullAndEmptyArrays: true } },
-    {
-      $project: {
-        _id: '$vendorUser._id',
-        userId: {
-          _id: '$_id',
-          name: '$name',
-          email: '$email',
-          mobileNumber: '$mobileNumber',
-          countryCode: '$countryCode',
-          fullName: '$fullName',
-          profileImage: '$profileImage',
-          profilePic: '$profilePic',
-          location: '$location',
-        },
-        businessName: { $ifNull: ['$vendorUser.businessName', '$businessName'] },
-        gstNumber: '$vendorUser.gstNumber',
-        description: '$vendorUser.description',
-        experience: '$vendorUser.experience',
-        rating: { $ifNull: ['$vendorUser.rating', 0] },
-        totalReviews: { $ifNull: ['$vendorUser.totalReviews', 0] },
-        serviceRadius: '$vendorUser.serviceRadius',
-        visitCharges: '$vendorUser.visitCharges',
-        isKycVerified: '$vendorUser.isKycVerified',
-        kycStatus: '$vendorUser.kycStatus',
-        profileCompleted: '$vendorUser.profileCompleted',
-        avgResponseTime: '$vendorUser.avgResponseTime',
-        completedBookings: '$vendorUser.completedBookings',
-        categoryId: '$vendorUser.categoryId',
-        categoryDetails: {
-          _id: '$categoryDetails._id',
-          title: '$categoryDetails.title',
-          icon: '$categoryDetails.icon',
-          image: '$categoryDetails.image',
-        },
-        vendorAvailability: '$vendorAvailability',
-        distance: '$distance',
-      },
-    },
-    {
-      $sort: {
-        distance: 1,
-      },
-    },
-    {
-      $facet: {
-        metadata: [{ $count: 'total' }],
-        data: [{ $skip: skip }, { $limit: limit }],
-      },
-    },
   ];
+
+  // Apply bookingOption filter if specified
+  if (isInstantBooking && !isScheduleBooking) {
+    pipeline.push({
+      $match: {
+        $or: [
+          { 'vendorAvailability.bookingOption': 'instant' },
+          { 'vendorAvailability.bookingOption': { $exists: false } },
+          { vendorAvailability: { $exists: false } },
+          { vendorAvailability: null },
+        ],
+      },
+    });
+  } else if (isScheduleBooking && !isInstantBooking) {
+    pipeline.push({
+      $match: {
+        'vendorAvailability.bookingOption': 'schedule',
+      },
+    });
+  }
+
+  pipeline.push({
+    $project: {
+      _id: '$vendorUser._id',
+      userId: {
+        _id: '$_id',
+        name: '$name',
+        email: '$email',
+        mobileNumber: '$mobileNumber',
+        countryCode: '$countryCode',
+        fullName: '$fullName',
+        profileImage: '$profileImage',
+        profilePic: '$profilePic',
+        location: '$location',
+      },
+      businessName: { $ifNull: ['$vendorUser.businessName', '$businessName'] },
+      gstNumber: '$vendorUser.gstNumber',
+      description: '$vendorUser.description',
+      experience: '$vendorUser.experience',
+      rating: { $ifNull: ['$vendorUser.rating', 0] },
+      totalReviews: { $ifNull: ['$vendorUser.totalReviews', 0] },
+      serviceRadius: '$vendorUser.serviceRadius',
+      visitCharges: '$vendorUser.visitCharges',
+      isKycVerified: '$vendorUser.isKycVerified',
+      kycStatus: '$vendorUser.kycStatus',
+      profileCompleted: '$vendorUser.profileCompleted',
+      avgResponseTime: '$vendorUser.avgResponseTime',
+      completedBookings: '$vendorUser.completedBookings',
+      categoryId: '$vendorUser.categoryId',
+      categoryDetails: {
+        _id: '$categoryDetails._id',
+        title: '$categoryDetails.title',
+        icon: '$categoryDetails.icon',
+        image: '$categoryDetails.image',
+      },
+      vendorAvailability: '$vendorAvailability',
+      distance: '$distance',
+    },
+  });
+
+  // Post-projection filtering
+  const postProjectMatch = {};
+  if (isWithin1Km) {
+    postProjectMatch.distance = { $lte: 1000 };
+  }
+  if (options.minRating && !Number.isNaN(Number(options.minRating))) {
+    postProjectMatch.rating = { $gte: Number(options.minRating) };
+  }
+  if (Object.keys(postProjectMatch).length > 0) {
+    pipeline.push({ $match: postProjectMatch });
+  }
+
+  // Determine sort order
+  let sortStage = { distance: 1 };
+  if (isPopular || options.sortBy === 'rating' || options.sortBy === 'popular') {
+    sortStage = { rating: -1, totalReviews: -1, distance: 1 };
+  } else if (options.sortBy === 'distance') {
+    sortStage = { distance: 1 };
+  } else if (options.sortBy === 'reviews' || options.sortBy === 'totalReviews') {
+    sortStage = { totalReviews: -1, rating: -1, distance: 1 };
+  } else if (options.sortBy === 'experience') {
+    sortStage = { experience: -1, rating: -1, distance: 1 };
+  }
+
+  pipeline.push({ $sort: sortStage });
+
+  pipeline.push({
+    $facet: {
+      metadata: [{ $count: 'total' }],
+      data: [{ $skip: skip }, { $limit: limit }],
+    },
+  });
 
   const results = await User.aggregate(pipeline);
   const total = (results[0] && results[0].metadata && results[0].metadata[0] && results[0].metadata[0].total) || 0;

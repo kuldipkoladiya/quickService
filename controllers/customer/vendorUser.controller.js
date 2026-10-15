@@ -56,7 +56,8 @@ export const removeVendorUser = catchAsync(async (req, res) => {
 export const getVendorUsersByCategory = catchAsync(async (req, res, next) => {
   try {
     const { categoryId } = req.params;
-    const { latitude, longitude, page, limit } = req.query;
+    const { latitude, longitude, page, limit, filter, bookingOption, sortBy, popular, within1km, maxDistance, minRating } =
+      req.query;
     const pageNum = parseInt(page, 10) || 1;
     const limitNum = parseInt(limit, 10) || 10;
 
@@ -68,6 +69,13 @@ export const getVendorUsersByCategory = catchAsync(async (req, res, next) => {
       {
         page: pageNum,
         limit: limitNum,
+        filter,
+        bookingOption,
+        sortBy,
+        popular,
+        within1km,
+        maxDistance,
+        minRating,
       },
       customerId
     );
