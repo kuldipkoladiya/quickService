@@ -99,9 +99,9 @@ export const verifyOtpCustomer = async ({ email, mobileNumber, otp }) => {
   let user;
 
   if (email) {
-    user = await userService.getOne({ email, role: EnumRoleOfUser.CUSTOMER });
+    user = await userService.getOne({ email, role: EnumRoleOfUser.CUSTOMER, isDeleted: { $ne: true } });
   } else if (mobileNumber) {
-    user = await userService.getOne({ mobileNumber, role: EnumRoleOfUser.CUSTOMER });
+    user = await userService.getOne({ mobileNumber, role: EnumRoleOfUser.CUSTOMER, isDeleted: { $ne: true } });
   }
 
   if (!user) {

@@ -131,6 +131,10 @@ router.post('/remove-device-token', auth(), validate(authValidation.removeDevice
  */
 router.post('/logout', auth(), validate(authValidation.logout), authController.logout);
 /**
+ * Delete customer account permanently and archive customer data
+ */
+router.delete('/delete-account', auth('customer'), validate(authValidation.deleteAccount), authController.deleteAccount);
+/**
  * Facebook login API for the User
  */
 router.post(

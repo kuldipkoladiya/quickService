@@ -140,6 +140,9 @@ const UserSchema = new mongoose.Schema({
   isDeleted: {
     type: Boolean,
   },
+  deletedAt: {
+    type: Date,
+  },
   fullName: {
     type: String,
   },

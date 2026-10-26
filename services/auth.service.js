@@ -4,7 +4,7 @@
 import httpStatus from 'http-status';
 import ApiError from 'utils/ApiError';
 import _ from 'lodash';
-import { User, Token } from 'models';
+import { User, Token, Address, Wallet, Bookings, DeletedCustomer } from 'models';
 import { userService, tokenService, emailService, countryCodeService } from 'services';
 import { EnumTypeOfToken, EnumCodeTypeOfCode, EnumRoleOfUser } from 'models/enum.model';
 import bcrypt from 'bcryptjs';
@@ -16,7 +16,7 @@ import { generateOtp } from 'utils/common';
  * @returns {Promise<User>}
  */
 export const loginUserWithEmailAndPassword = async (email, password, role = EnumRoleOfUser.CUSTOMER) => {
-  const user = await userService.getOne({ email, role });
+  const user = await userService.getOne({ email, role, isDeleted: { $ne: true } });
   if (!user) {
     throw new ApiError(httpStatus.BAD_REQUEST, 'Incorrect email or password');
   }
@@ -231,12 +231,9 @@ export const loginUserWithEmailOrMobileAndPassword = async (
   } else {
     throw new ApiError(httpStatus.BAD_REQUEST, 'Email or mobile number is required');
   }
-  if (!user) {
+  if (!user || user.isDeleted) {
     throw new ApiError(httpStatus.BAD_REQUEST, 'Incorrect email or password');
   }
-  // if (Array.isArray(user.profileHideAndDelete) && user.profileHideAndDelete.some((item) => item.isProfileDelete === true)) {
-  //   throw new ApiError(httpStatus.BAD_REQUEST, 'Your account has been deleted.');
-  // }
   const isValid = await bcrypt.compare(password, user.password);
 
   if (!isValid) {
@@ -247,4 +244,71 @@ export const loginUserWithEmailOrMobileAndPassword = async (
   }
 
   return user;
+};
+
+/**
+ * Delete customer account permanently and archive customer data
+ * @param {User} user - Current authenticated user
+ * @param {Object} payload - { reason, feedback }
+ * @returns {Promise<DeletedCustomer>}
+ */
+export const deleteCustomerAccount = async (user, { reason, feedback } = {}) => {
+  if (!user) {
+    throw new ApiError(httpStatus.NOT_FOUND, 'User not found');
+  }
+  if (user.role !== EnumRoleOfUser.CUSTOMER) {
+    throw new ApiError(httpStatus.FORBIDDEN, 'Only customer accounts can be deleted through this endpoint');
+  }
+
+  const userId = user._id;
+
+  // 1. Snapshot customer data
+  const userSnapshot = user.toObject ? user.toObject() : { ...user };
+  delete userSnapshot.password;
+
+  // 2. Fetch associated customer data snapshots
+  const [addresses, wallet, bookingsCount] = await Promise.all([
+    Address.find({ userId }).lean(),
+    Wallet.findOne({ userId }).lean(),
+    Bookings.countDocuments({ customerId: userId }),
+  ]);
+
+  // 3. Save into DeletedCustomer archive collection
+  const archivedRecord = await DeletedCustomer.create({
+    userId,
+    originalUser: userSnapshot,
+    reason: (reason || '').trim(),
+    feedback: (feedback || '').trim(),
+    addresses: addresses || [],
+    wallet: wallet || null,
+    bookingsCount: bookingsCount || 0,
+    deletedAt: new Date(),
+  });
+
+  // 4. Invalidate all tokens for this user
+  await Token.deleteMany({ user: userId });
+
+  // 5. Update user to mark as deleted, clear device tokens, and suffix email/mobile to prevent collisions if user signs up again in future
+  const timestamp = Date.now();
+  const anonymizedEmail = user.email ? `deleted_${timestamp}_${user.email}` : undefined;
+
+  await User.updateOne(
+    { _id: userId },
+    {
+      $set: {
+        isDeleted: true,
+        deletedAt: new Date(),
+        deviceTokens: [],
+        ...(anonymizedEmail && { email: anonymizedEmail }),
+        ...(user.mobileNumber && { mobileNumber: null, pendingMobileNumber: null }),
+      },
+      $unset: {
+        googleProvider: 1,
+        appleProvider: 1,
+        facebookProvider: 1,
+      },
+    }
+  );
+
+  return archivedRecord;
 };

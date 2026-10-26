@@ -24,9 +24,9 @@ export const registerCustomer = catchAsync(async (req, res) => {
 
   // 🔍 Find user by email or mobile
   if (email) {
-    user = await userService.getOne({ email, role: EnumRoleOfUser.CUSTOMER });
+    user = await userService.getOne({ email, role: EnumRoleOfUser.CUSTOMER, isDeleted: { $ne: true } });
   } else if (mobileNumber) {
-    user = await userService.getOne({ mobileNumber, role: EnumRoleOfUser.CUSTOMER });
+    user = await userService.getOne({ mobileNumber, role: EnumRoleOfUser.CUSTOMER, isDeleted: { $ne: true } });
   }
 
   // 🌍 Handle country code (only for mobile)
@@ -697,6 +697,18 @@ export const resendOtpVendor = catchAsync(async (req, res) => {
     results: {
       success: true,
       message: 'OTP has been resent to your registered mobile or email. Please verify.',
+    },
+  });
+});
+
+export const deleteAccount = catchAsync(async (req, res) => {
+  const { user } = req;
+  const { reason, feedback } = req.body || {};
+  await authService.deleteCustomerAccount(user, { reason, feedback });
+  return res.status(httpStatus.OK).send({
+    results: {
+      success: true,
+      message: 'Your account has been deleted permanently and your data has been safely archived.',
     },
   });
 });

@@ -30,3 +30,4 @@ module.exports.Error = require('./error.model');
 module.exports.Enum = require('./enum.model');
 module.exports.plugins = require('./plugins');
 module.exports.CountryCode = require('./countryCode.model');
+module.exports.DeletedCustomer = require('./deletedCustomer.model');

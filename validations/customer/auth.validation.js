@@ -213,3 +213,10 @@ export const resendOtpVendor = {
       'object.missing': 'Please provide either email or mobileNumber to resend OTP',
     }),
 };
+
+export const deleteAccount = {
+  body: Joi.object().keys({
+    reason: Joi.string().trim().max(500).allow('').optional(),
+    feedback: Joi.string().trim().max(1000).allow('').optional(),
+  }),
+};
