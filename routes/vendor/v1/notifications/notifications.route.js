@@ -25,6 +25,27 @@ router
     validate(notificationsValidation.paginatedNotifications),
     notificationsController.paginateNotifications
   );
+
+router
+  .route('/settings')
+  /**
+   * getNotificationSettings
+   */
+  .get(auth('vendor'), notificationsController.getNotificationSettings)
+  /**
+   * updateNotificationSettings
+   */
+  .patch(
+    auth('vendor'),
+    validate(notificationsValidation.updateNotificationSettings),
+    notificationsController.updateNotificationSettings
+  )
+  .put(
+    auth('vendor'),
+    validate(notificationsValidation.updateNotificationSettings),
+    notificationsController.updateNotificationSettings
+  );
+
 router
   .route('/:notificationsId')
   /**

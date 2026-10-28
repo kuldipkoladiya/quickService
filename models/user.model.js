@@ -168,6 +168,24 @@ const UserSchema = new mongoose.Schema({
   profilePic: {
     type: String,
   },
+  notificationSettings: {
+    pushEnabled: {
+      type: Boolean,
+      default: true,
+    },
+    chatMessages: {
+      type: Boolean,
+      default: true,
+    },
+    promotions: {
+      type: Boolean,
+      default: true,
+    },
+    bookingUpdates: {
+      type: Boolean,
+      default: true,
+    },
+  },
   location: {
     type: {
       type: String,

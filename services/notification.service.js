@@ -248,14 +248,59 @@ export const sendPushNotification = async ({
 /**
  * Send push notification to a specific User by User ID or VendorUser ID
  */
-export const sendNotificationToUser = async (userIdOrVendorId, payload) => {
+export const sendNotificationToUser = async (userIdOrVendorId, payload, notificationType = null) => {
   if (!userIdOrVendorId) return null;
   const actualUserId = await resolveUserId(userIdOrVendorId);
   if (!actualUserId) return null;
 
-  const user = await User.findById(actualUserId).select('deviceTokens');
+  const user = await User.findById(actualUserId).select('deviceTokens notificationSettings');
   if (!user || !user.deviceTokens || !user.deviceTokens.length) {
     return { success: false, message: 'User has no registered device tokens' };
+  }
+
+  // 🛡️ Check user notification preferences
+  const notifType = notificationType || (payload && payload.data && payload.data.notificationType);
+  if (user.notificationSettings) {
+    const { pushEnabled, chatMessages, promotions, bookingUpdates } = user.notificationSettings;
+
+    // 1. Master push toggle (Critical OTP notification like SERVICE_STARTED is always delivered)
+    if (pushEnabled === false && notifType !== EnumNotificationType.SERVICE_STARTED) {
+      console.log(`[Notification] ⏭️ Push skipped: User ${actualUserId} disabled push notifications`);
+      return { success: false, message: 'User has disabled push notifications', skippedByPreference: true };
+    }
+
+    // 2. Chat messages toggle
+    if (chatMessages === false && notifType === EnumNotificationType.CHAT_MESSAGE) {
+      console.log(`[Notification] ⏭️ Push skipped: User ${actualUserId} disabled chat messages`);
+      return { success: false, message: 'User has disabled chat notifications', skippedByPreference: true };
+    }
+
+    // 3. Promotional / Marketing toggle
+    const promoTypes = [
+      EnumNotificationType.PROMO_OFFER,
+      EnumNotificationType.STORE_REMINDER,
+      EnumNotificationType.GENERAL,
+      EnumNotificationType.LOGIN_SUCCESS,
+    ];
+    if (promotions === false && promoTypes.includes(notifType)) {
+      console.log(`[Notification] ⏭️ Push skipped: User ${actualUserId} disabled promotional notifications`);
+      return { success: false, message: 'User has disabled promotional notifications', skippedByPreference: true };
+    }
+
+    // 4. Booking updates toggle (Critical OTP is exempted)
+    const bookingTypes = [
+      EnumNotificationType.BOOKING_PLACED,
+      EnumNotificationType.NEW_BOOKING_REQUEST,
+      EnumNotificationType.BOOKING_ACCEPTED,
+      EnumNotificationType.VENDOR_ON_THE_WAY,
+      EnumNotificationType.VENDOR_ARRIVED,
+      EnumNotificationType.BOOKING_COMPLETED,
+      EnumNotificationType.NEW_REVIEW,
+    ];
+    if (bookingUpdates === false && bookingTypes.includes(notifType)) {
+      console.log(`[Notification] ⏭️ Push skipped: User ${actualUserId} disabled booking updates`);
+      return { success: false, message: 'User has disabled booking update notifications', skippedByPreference: true };
+    }
   }
 
   const tokens = user.deviceTokens.map((item) => item.deviceToken).filter(Boolean);
@@ -329,16 +374,20 @@ export const sendNotificationAndSave = async ({
     updatedBy: actualSenderId,
   });
 
-  const pushResult = await sendNotificationToUser(actualReceiverId, {
-    title,
-    body: message,
-    data: {
-      notificationId: String(dbNotification._id),
-      notificationType,
-      related: related ? String(related) : '',
-      ...data,
+  const pushResult = await sendNotificationToUser(
+    actualReceiverId,
+    {
+      title,
+      body: message,
+      data: {
+        notificationId: String(dbNotification._id),
+        notificationType,
+        related: related ? String(related) : '',
+        ...data,
+      },
     },
-  });
+    notificationType
+  );
 
   if (pushResult && pushResult.success) {
     console.log(

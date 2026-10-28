@@ -64,3 +64,14 @@ export const paginatedNotifications = {
     })
     .unknown(true),
 };
+
+export const updateNotificationSettings = {
+  body: Joi.object()
+    .keys({
+      pushEnabled: Joi.boolean(),
+      chatMessages: Joi.boolean(),
+      promotions: Joi.boolean(),
+      bookingUpdates: Joi.boolean(),
+    })
+    .min(1),
+};

@@ -4,6 +4,7 @@
  */
 import httpStatus from 'http-status';
 import { notificationsService, notificationService } from 'services';
+import { User } from 'models';
 import { catchAsync } from 'utils/catchAsync';
 
 export const getNotifications = catchAsync(async (req, res) => {
@@ -73,4 +74,57 @@ export const removeNotifications = catchAsync(async (req, res) => {
   };
   const notifications = await notificationsService.removeNotifications(filter);
   return res.status(httpStatus.OK).send({ results: notifications });
+});
+
+export const getNotificationSettings = catchAsync(async (req, res) => {
+  const user = await User.findById(req.user._id).select('notificationSettings');
+  const defaultSettings = {
+    pushEnabled: true,
+    chatMessages: true,
+    promotions: true,
+    bookingUpdates: true,
+  };
+  let userSettings = {};
+  if (user && user.notificationSettings) {
+    userSettings =
+      typeof user.notificationSettings.toObject === 'function'
+        ? user.notificationSettings.toObject()
+        : user.notificationSettings;
+  }
+  const settings = {
+    ...defaultSettings,
+    ...userSettings,
+  };
+  return res.status(httpStatus.OK).send({
+    status: true,
+    message: 'Notification settings retrieved successfully',
+    results: settings,
+  });
+});
+
+export const updateNotificationSettings = catchAsync(async (req, res) => {
+  const { pushEnabled, chatMessages, promotions, bookingUpdates } = req.body;
+  const user = await User.findById(req.user._id);
+
+  if (!user.notificationSettings) {
+    user.notificationSettings = {
+      pushEnabled: true,
+      chatMessages: true,
+      promotions: true,
+      bookingUpdates: true,
+    };
+  }
+
+  if (typeof pushEnabled === 'boolean') user.notificationSettings.pushEnabled = pushEnabled;
+  if (typeof chatMessages === 'boolean') user.notificationSettings.chatMessages = chatMessages;
+  if (typeof promotions === 'boolean') user.notificationSettings.promotions = promotions;
+  if (typeof bookingUpdates === 'boolean') user.notificationSettings.bookingUpdates = bookingUpdates;
+
+  await user.save();
+
+  return res.status(httpStatus.OK).send({
+    status: true,
+    message: 'Notification settings updated successfully',
+    results: user.notificationSettings,
+  });
 });
